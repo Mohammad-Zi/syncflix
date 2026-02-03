@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎬 SyncFlix Host - LIVE</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+        body { background: #000; color: white; padding: 20px; }
+        
+        .container { max-width: 1000px; margin: 0 auto; }
+        
+        .header { text-align: center; margin-bottom: 30px; }
+        h1 { color: #4CAF50; }
+        
+        .room-id { 
+            background: #222; 
+            padding: 15px; 
+            border-radius: 10px; 
+            font-family: monospace; 
+            font-size: 24px; 
+            letter-spacing: 3px; 
+            margin: 20px auto; 
+            max-width: 400px;
+            border: 2px solid #4CAF50;
+            text-align: center;
+        }
+        
+        .main-content {
+            display: flex;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        @media (max-width: 768px) {
+            .main-content { flex-direction: column; }
+        }
+        
+        .video-section { flex: 2; }
+        
+        .video-container {
+            background: #111;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            min-height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #localVideo {
+            max-width: 100%;
+            max-height: 500px;
+            border-radius: 5px;
+            background: #000;
+        }
+        
+        .no-video {
+            text-align: center;
+            color: #888;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .btn {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        
+        .btn-start {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .btn-stop {
+            background: #f44336;
+            color: white;
+        }
+        
+        .btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        
+        .sidebar { 
+            flex: 1; 
+            min-width: 300px; 
+        }
+        
+        .panel {
+            background: #111;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .panel h3 {
+            color: #4CAF50;
+            margin-bottom: 15px;
+        }
+        
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #f44336;
+        }
+        
+        .status-dot.connected {
+            background: #4CAF50;
+            box-shadow: 0 0 15px #4CAF50;
+        }
+        
+        .chat-messages {
+            height: 300px;
+            overflow-y: auto;
+            background: #000;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .message {
+            margin-bottom: 10px;
+            padding: 10px 15px;
+            border-radius: 10px;
+            max-width: 90%;
+            word-wrap: break-word;
+        }
+        
+        .message.sent {
+            background: #4CAF50;
+            margin-left: auto;
+            margin-right: 10px;
+        }
+        
+        .message.received {
+            background: #333;
+            margin-right: auto;
+            margin-left: 10px;
+        }
+        
+        .message.system {
+            background: #FF9800;
+            color: #000;
+            text-align: center;
+            margin: 5px auto;
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+        
+        .chat-input {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .chat-input input {
+            flex: 1;
+            padding: 12px;
+            background: #222;
+            border: 1px solid #444;
+            border-radius: 5px;
+            color: white;
+            font-size: 16px;
+        }
+        
+        .chat-input button {
+            padding: 12px 25px;
+            background: #4CAF50;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #333;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transform: translateX(150%);
+            transition: transform 0.3s;
+            z-index: 1000;
+            max-width: 400px;
+        }
+        
+        .notification.show {
+            transform: translateX(0);
+        }
+        
+        .notification.success {
+            background: #4CAF50;
+        }
+        
+        .notification.error {
+            background: #f44336;
+        }
+        
+        /* Scrollbar */
+        .chat-messages::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .chat-messages::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+        }
+        
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎬 SyncFlix Host - LIVE</h1>
+            <p>Share your screen with partner - REAL WebRTC</p>
+        </div>
+        
+        <div class="room-id" id="roomIdDisplay">Connecting to server...</div>
+        
+        <div class="main-content">
+            <div class="video-section">
+                <div class="video-container">
+                    <video id="localVideo" autoplay playsinline muted></video>
+                    <div class="no-video" id="noVideo">
+                        <div>🖥️ Ready to Share Screen</div>
+                        <p>Click "Start Sharing" below</p>
+                    </div>
+                </div>
+                
+                <div class="controls">
+                    <button id="startBtn" class="btn btn-start">Start Screen Sharing</button>
+                    <button id="stopBtn" class="btn btn-stop" disabled>Stop Sharing</button>
+                </div>
+            </div>
+            
+            <div class="sidebar">
+                <div class="panel">
+                    <h3>🔗 Connection</h3>
+                    <div class="connection-status">
+                        <div class="status-dot" id="statusDot"></div>
+                        <span id="statusText">Connecting to server...</span>
+                    </div>
+                    <p>Share this Room ID with partner:</p>
+                    <div style="background: #000; padding: 10px; border-radius: 5px; margin: 10px 0; font-family: monospace; text-align: center; font-size: 20px;">
+                        <span id="roomCode">-----</span>
+                    </div>
+                </div>
+                
+                <div class="panel">
+                    <h3>💬 Live Chat</h3>
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message system">Setting up connection...</div>
+                    </div>
+                    <div class="chat-input">
+                        <input type="text" id="chatInput" placeholder="Type a message..." disabled>
+                        <button id="sendBtn" disabled>Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="notification" id="notification">
+        <span id="notificationText">Ready</span>
+    </div>
+
+    <!-- Simple Peer for WebRTC -->
+    <script src="https://cdn.jsdelivr.net/npm/simple-peer@9.11.0/simplepeer.min.js"></script>
+
+    <script>
+        // REAL WebRTC Host
+        const roomId = generateRoomId();
+        let socket = null;
+        let peer = null;
+        let localStream = null;
+        let dataChannel = null;
+        
+        // Initialize
+        initializeApp();
+        
+        function initializeApp() {
+            // Connect to WebSocket server
+            connectWebSocket();
+            
+            // Display room ID
+            document.getElementById('roomIdDisplay').textContent = `Room ID: ${roomId}`;
+            document.getElementById('roomCode').textContent = roomId;
+            
+            addSystemMessage(`Your Room ID: ${roomId}`);
+            addSystemMessage("Share this ID with your partner");
+            
+            // Event listeners
+            document.getElementById('startBtn').addEventListener('click', startScreenSharing);
+            document.getElementById('stopBtn').addEventListener('click', stopScreenSharing);
+            document.getElementById('sendBtn').addEventListener('click', sendMessage);
+            document.getElementById('chatInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') sendMessage();
+            });
+        }
+        
+        function generateRoomId() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let result = '';
+            for (let i = 0; i < 6; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        }
+        
+        function connectWebSocket() {
+            // Connect to WebSocket server
+            socket = new WebSocket('wss://syncflix-server.onrender.com');
+            
+            socket.onopen = () => {
+                console.log('✅ Connected to signaling server');
+                showNotification('Connected to server');
+                updateStatus('Waiting for partner...');
+                
+                // Join room as host
+                socket.send(JSON.stringify({
+                    type: 'join',
+                    room: roomId,
+                    role: 'host'
+                }));
+            };
+            
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                console.log('📨 Received:', data);
+                
+                switch(data.type) {
+                    case 'joined':
+                        addSystemMessage(`Joined room ${roomId}`);
+                        break;
+                        
+                    case 'user_joined':
+                        addSystemMessage(`👤 Partner connected`);
+                        showNotification('Partner connected!');
+                        updateStatus('Partner connected');
+                        
+                        // If we're already sharing, start WebRTC
+                        if (localStream) {
+                            startWebRTC();
+                        }
+                        break;
+                        
+                    case 'user_left':
+                        addSystemMessage(`👤 Partner disconnected`);
+                        showNotification('Partner disconnected');
+                        updateStatus('Waiting for partner...');
+                        
+                        if (peer) {
+                            peer.destroy();
+                            peer = null;
+                        }
+                        disableChat();
+                        break;
+                        
+                    case 'offer':
+                        // Handle WebRTC offer from viewer
+                        if (peer) {
+                            peer.signal(data.offer);
+                        }
+                        break;
+                        
+                    case 'answer':
+                        // Handle WebRTC answer from viewer
+                        if (peer) {
+                            peer.signal(data.answer);
+                        }
+                        break;
+                        
+                    case 'candidate':
+                        // Handle ICE candidate
+                        if (peer) {
+                            peer.signal(data.candidate);
+                        }
+                        break;
+                        
+                    case 'chat':
+                        // Handle chat message
+                        addReceivedMessage(data.message);
+                        break;
+                }
+            };
+            
+            socket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                showNotification('Connection error', 'error');
+                updateStatus('Connection error');
+            };
+            
+            socket.onclose = () => {
+                console.log('WebSocket closed');
+                showNotification('Disconnected from server', 'error');
+                updateStatus('Disconnected');
+                
+                // Try to reconnect after 5 seconds
+                setTimeout(() => {
+                    connectWebSocket();
+                }, 5000);
+            };
+        }
+        
+        async function startScreenSharing() {
+            try {
+                // Get screen with audio
+                localStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: {
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    },
+                    audio: true
+                });
+                
+                // Show local video
+                document.getElementById('localVideo').srcObject = localStream;
+                document.getElementById('noVideo').style.display = 'none';
+                
+                // Update UI
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+                
+                addSystemMessage('✅ Screen sharing started');
+                showNotification('Screen sharing active');
+                
+                // Start WebRTC if viewer is already connected
+                startWebRTC();
+                
+                // Handle when user stops sharing via browser UI
+                localStream.getVideoTracks()[0].onended = () => {
+                    stopScreenSharing();
+                    showNotification('Screen sharing stopped by browser');
+                };
+                
+            } catch (error) {
+                console.error('Screen sharing error:', error);
+                addSystemMessage(`❌ Error: ${error.message}`);
+                showNotification('Failed to share screen', 'error');
+            }
+        }
+        
+        function stopScreenSharing() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            
+            if (peer) {
+                peer.destroy();
+                peer = null;
+            }
+            
+            // Update UI
+            document.getElementById('localVideo').srcObject = null;
+            document.getElementById('noVideo').style.display = 'block';
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            
+            disableChat();
+            addSystemMessage('🛑 Screen sharing stopped');
+            showNotification('Screen sharing stopped');
+        }
+        
+        function startWebRTC() {
+            if (!localStream) return;
+            
+            console.log('🌐 Starting WebRTC connection...');
+            
+            // Create SimplePeer instance
+            peer = new SimplePeer({
+                initiator: true,
+                stream: localStream,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' }
+                    ]
+                }
+            });
+            
+            // Handle signaling data
+            peer.on('signal', (data) => {
+                console.log('📤 WebRTC signal:', data.type);
+                
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    if (data.type === 'offer') {
+                        socket.send(JSON.stringify({
+                            type: 'offer',
+                            room: roomId,
+                            offer: data
+                        }));
+                    } else if (data.type === 'answer') {
+                        socket.send(JSON.stringify({
+                            type: 'answer',
+                            room: roomId,
+                            answer: data
+                        }));
+                    } else if (data.candidate) {
+                        socket.send(JSON.stringify({
+                            type: 'candidate',
+                            room: roomId,
+                            candidate: data
+                        }));
+                    }
+                }
+            });
+            
+            // WebRTC connected
+            peer.on('connect', () => {
+                console.log('✅ WebRTC connected!');
+                addSystemMessage('✅ WebRTC connection established');
+                showNotification('WebRTC connected!');
+                enableChat();
+            });
+            
+            // Handle data channel for chat
+            peer.on('data', (data) => {
+                const message = JSON.parse(data.toString());
+                if (message.type === 'chat') {
+                    addReceivedMessage(message.text);
+                }
+            });
+            
+            // Handle errors
+            peer.on('error', (error) => {
+                console.error('❌ WebRTC error:', error);
+                addSystemMessage(`❌ WebRTC error: ${error.message}`);
+            });
+            
+            // Handle close
+            peer.on('close', () => {
+                console.log('🔌 WebRTC connection closed');
+                disableChat();
+            });
+        }
+        
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message) return;
+            
+            // Send via WebRTC if connected
+            if (peer && peer.connected) {
+                try {
+                    peer.send(JSON.stringify({
+                        type: 'chat',
+                        text: message,
+                        timestamp: Date.now()
+                    }));
+                    
+                    addSentMessage(message);
+                    input.value = '';
+                    
+                } catch (error) {
+                    console.error('Error sending via WebRTC:', error);
+                    sendViaWebSocket(message);
+                }
+            } else {
+                // Fallback to WebSocket
+                sendViaWebSocket(message);
+            }
+        }
+        
+        function sendViaWebSocket(message) {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'chat',
+                    room: roomId,
+                    message: message
+                }));
+                
+                addSentMessage(message);
+                document.getElementById('chatInput').value = '';
+            }
+        }
+        
+        function enableChat() {
+            document.getElementById('chatInput').disabled = false;
+            document.getElementById('sendBtn').disabled = false;
+            document.getElementById('chatInput').placeholder = "Chat with partner...";
+            document.getElementById('chatInput').focus();
+        }
+        
+        function disableChat() {
+            document.getElementById('chatInput').disabled = true;
+            document.getElementById('sendBtn').disabled = true;
+            document.getElementById('chatInput').placeholder = "Not connected...";
+        }
+        
+        function updateStatus(text) {
+            document.getElementById('statusText').textContent = text;
+            
+            if (text.includes('connected')) {
+                document.getElementById('statusDot').className = 'status-dot connected';
+            } else {
+                document.getElementById('statusDot').className = 'status-dot';
+            }
+        }
+        
+        function addSystemMessage(text) {
+            addMessage(text, 'system');
+        }
+        
+        function addSentMessage(text) {
+            addMessage(`You: ${text}`, 'sent');
+        }
+        
+        function addReceivedMessage(text) {
+            addMessage(`Partner: ${text}`, 'received');
+        }
+        
+        function addMessage(text, type) {
+            const chat = document.getElementById('chatMessages');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.textContent = text;
+            chat.appendChild(msg);
+            chat.scrollTop = chat.scrollHeight;
+        }
+        
+        function showNotification(text, type = 'success') {
+            const notification = document.getElementById('notification');
+            document.getElementById('notificationText').textContent = text;
+            notification.className = `notification ${type} show`;
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

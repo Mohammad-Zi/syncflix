@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>👁️ SyncFlix Viewer - LIVE</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+        body { background: #000; color: white; padding: 20px; }
+        
+        .container { max-width: 1000px; margin: 0 auto; }
+        
+        .header { text-align: center; margin-bottom: 30px; }
+        h1 { color: #4CAF50; }
+        
+        .connection-panel {
+            background: #111;
+            border-radius: 10px;
+            padding: 30px;
+            margin: 20px auto;
+            max-width: 500px;
+            text-align: center;
+        }
+        
+        .room-input {
+            width: 100%;
+            padding: 15px;
+            background: #222;
+            border: 2px solid #444;
+            border-radius: 8px;
+            color: white;
+            font-size: 18px;
+            text-align: center;
+            margin: 20px 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+            margin: 10px 5px;
+        }
+        
+        .btn-connect {
+            background: #4CAF50;
+            color: white;
+            width: 100%;
+        }
+        
+        .btn-disconnect {
+            background: #f44336;
+            color: white;
+        }
+        
+        .main-content {
+            display: none;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .connected .main-content {
+            display: flex;
+        }
+        
+        @media (max-width: 768px) {
+            .main-content { flex-direction: column; }
+        }
+        
+        .video-section { flex: 2; }
+        
+        .video-container {
+            background: #111;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            min-height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #remoteVideo {
+            max-width: 100%;
+            max-height: 500px;
+            border-radius: 5px;
+            background: #000;
+        }
+        
+        .no-video {
+            text-align: center;
+            color: #888;
+        }
+        
+        .sidebar { 
+            flex: 1; 
+            min-width: 300px; 
+        }
+        
+        .panel {
+            background: #111;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .panel h3 {
+            color: #4CAF50;
+            margin-bottom: 15px;
+        }
+        
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #f44336;
+        }
+        
+        .status-dot.connected {
+            background: #4CAF50;
+            box-shadow: 0 0 15px #4CAF50;
+        }
+        
+        .status-dot.streaming {
+            background: #2196F3;
+            box-shadow: 0 0 15px #2196F3;
+        }
+        
+        .chat-messages {
+            height: 300px;
+            overflow-y: auto;
+            background: #000;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .message {
+            margin-bottom: 10px;
+            padding: 10px 15px;
+            border-radius: 10px;
+            max-width: 90%;
+            word-wrap: break-word;
+        }
+        
+        .message.sent {
+            background: #4CAF50;
+            margin-left: auto;
+            margin-right: 10px;
+        }
+        
+        .message.received {
+            background: #333;
+            margin-right: auto;
+            margin-left: 10px;
+        }
+        
+        .message.system {
+            background: #FF9800;
+            color: #000;
+            text-align: center;
+            margin: 5px auto;
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+        
+        .chat-input {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .chat-input input {
+            flex: 1;
+            padding: 12px;
+            background: #222;
+            border: 1px solid #444;
+            border-radius: 5px;
+            color: white;
+            font-size: 16px;
+        }
+        
+        .chat-input button {
+            padding: 12px 25px;
+            background: #4CAF50;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #333;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transform: translateX(150%);
+            transition: transform 0.3s;
+            z-index: 1000;
+            max-width: 400px;
+        }
+        
+        .notification.show {
+            transform: translateX(0);
+        }
+        
+        .notification.success {
+            background: #4CAF50;
+        }
+        
+        .notification.error {
+            background: #f44336;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="appContainer">
+        <div class="header">
+            <h1>👁️ SyncFlix Viewer - LIVE</h1>
+            <p>Watch your partner's screen - REAL WebRTC</p>
+        </div>
+        
+        <div id="connectionPanel" class="connection-panel">
+            <h2>🔗 Connect to Partner</h2>
+            <p>Enter the Room ID from your partner:</p>
+            <input type="text" id="roomInput" class="room-input" placeholder="Enter 6-character Room ID" maxlength="6">
+            <button id="connectBtn" class="btn btn-connect">Connect to Partner</button>
+            
+            <div class="connection-status" style="margin-top: 20px;">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Ready to connect</span>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="video-section">
+                <div class="video-container">
+                    <video id="remoteVideo" autoplay playsinline></video>
+                    <div class="no-video" id="noVideo">
+                        <div>🎬 Connected to Partner</div>
+                        <p>Waiting for host to share screen...</p>
+                    </div>
+                </div>
+                
+                <div style="text-align: center;">
+                    <button id="disconnectBtn" class="btn btn-disconnect">Disconnect</button>
+                </div>
+            </div>
+            
+            <div class="sidebar">
+                <div class="panel">
+                    <h3>🔗 Connection Status</h3>
+                    <div class="connection-status">
+                        <div class="status-dot" id="streamStatusDot"></div>
+                        <span id="streamStatusText">Waiting for stream...</span>
+                    </div>
+                    <p style="color: #888; font-size: 14px; margin-top: 10px;">
+                        Room: <span id="connectedRoom">-----</span>
+                    </p>
+                </div>
+                
+                <div class="panel">
+                    <h3>💬 Live Chat</h3>
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message system">Connect to partner to chat</div>
+                    </div>
+                    <div class="chat-input">
+                        <input type="text" id="chatInput" placeholder="Type a message...">
+                        <button id="sendBtn">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="notification" id="notification">
+        <span id="notificationText">Ready</span>
+    </div>
+
+    <!-- Simple Peer for WebRTC -->
+    <script src="https://cdn.jsdelivr.net/npm/simple-peer@9.11.0/simplepeer.min.js"></script>
+
+    <script>
+        // REAL WebRTC Viewer
+        let socket = null;
+        let peer = null;
+        let roomId = '';
+        
+        // Initialize
+        initializeApp();
+        
+        function initializeApp() {
+            // Event listeners
+            document.getElementById('connectBtn').addEventListener('click', connectToHost);
+            document.getElementById('disconnectBtn').addEventListener('click', disconnectFromHost);
+            document.getElementById('sendBtn').addEventListener('click', sendMessage);
+            document.getElementById('chatInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') sendMessage();
+            });
+            
+            // Auto-uppercase room input
+            document.getElementById('roomInput').addEventListener('input', function() {
+                this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            });
+        }
+        
+        function connectToHost() {
+            roomId = document.getElementById('roomInput').value.trim().toUpperCase();
+            
+            if (!roomId || roomId.length !== 6) {
+                showNotification('Please enter a valid 6-character Room ID', 'error');
+                document.getElementById('roomInput').focus();
+                return;
+            }
+            
+            console.log(`🔗 Connecting to room: ${roomId}`);
+            
+            // Update UI
+            document.getElementById('connectBtn').disabled = true;
+            document.getElementById('connectBtn').textContent = 'Connecting...';
+            updateStatus('Connecting to server...');
+            
+            addSystemMessage(`Connecting to room ${roomId}...`);
+            
+            // Connect to WebSocket server
+            connectWebSocket();
+        }
+        
+        function connectWebSocket() {
+            // Connect to WebSocket server
+            socket = new WebSocket('wss://syncflix-server.onrender.com');
+            
+            socket.onopen = () => {
+                console.log('✅ Connected to signaling server');
+                showNotification('Connected to server');
+                
+                // Join room as viewer
+                socket.send(JSON.stringify({
+                    type: 'join',
+                    room: roomId,
+                    role: 'viewer'
+                }));
+                
+                addSystemMessage('✅ Connected to signaling server');
+            };
+            
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                console.log('📨 Received:', data);
+                
+                switch(data.type) {
+                    case 'joined':
+                        addSystemMessage(`Joined room ${roomId}`);
+                        updateStatus('Waiting for host...');
+                        break;
+                        
+                    case 'user_joined':
+                        addSystemMessage(`👤 Host connected`);
+                        showNotification('Host connected!');
+                        updateStatus('Host connected');
+                        break;
+                        
+                    case 'user_left':
+                        addSystemMessage(`👤 Host disconnected`);
+                        showNotification('Host disconnected');
+                        updateStatus('Host disconnected');
+                        
+                        if (peer) {
+                            peer.destroy();
+                            peer = null;
+                        }
+                        break;
+                        
+                    case 'offer':
+                        // Handle WebRTC offer from host
+                        if (!peer) {
+                            startWebRTC(data.offer);
+                        }
+                        break;
+                        
+                    case 'answer':
+                        // Handle WebRTC answer
+                        if (peer) {
+                            peer.signal(data.answer);
+                        }
+                        break;
+                        
+                    case 'candidate':
+                        // Handle ICE candidate
+                        if (peer) {
+                            peer.signal(data.candidate);
+                        }
+                        break;
+                        
+                    case 'chat':
+                        // Handle chat message
+                        addReceivedMessage(data.message);
+                        break;
+                }
+            };
+            
+            socket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                showNotification('Connection error', 'error');
+                updateStatus('Connection error');
+            };
+            
+            socket.onclose = () => {
+                console.log('WebSocket closed');
+                showNotification('Disconnected from server', 'error');
+                updateStatus('Disconnected');
+            };
+        }
+        
+        function startWebRTC(offer) {
+            console.log('🌐 Starting WebRTC with host offer');
+            
+            // Create SimplePeer instance
+            peer = new SimplePeer({
+                initiator: false,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' }
+                    ]
+                }
+            });
+            
+            // Handle signaling data
+            peer.on('signal', (data) => {
+                console.log('📤 WebRTC signal:', data.type);
+                
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    if (data.type === 'offer') {
+                        socket.send(JSON.stringify({
+                            type: 'offer',
+                            room: roomId,
+                            offer: data
+                        }));
+                    } else if (data.type === 'answer') {
+                        socket.send(JSON.stringify({
+                            type: 'answer',
+                            room: roomId,
+                            answer: data
+                        }));
+                    } else if (data.candidate) {
+                        socket.send(JSON.stringify({
+                            type: 'candidate',
+                            room: roomId,
+                            candidate: data
+                        }));
+                    }
+                }
+            });
+            
+            // WebRTC connected
+            peer.on('connect', () => {
+                console.log('✅ WebRTC connected!');
+                addSystemMessage('✅ WebRTC connection established');
+                showNotification('WebRTC connected!');
+                
+                // Show connected UI
+                document.getElementById('appContainer').classList.add('connected');
+                document.getElementById('connectedRoom').textContent = roomId;
+            });
+            
+            // Received stream from host
+            peer.on('stream', (stream) => {
+                console.log('🎬 Received host stream!');
+                
+                document.getElementById('remoteVideo').srcObject = stream;
+                document.getElementById('noVideo').style.display = 'none';
+                
+                document.getElementById('streamStatusDot').className = 'status-dot streaming';
+                document.getElementById('streamStatusText').textContent = 'Streaming host screen';
+                
+                showNotification('Now receiving host\'s screen!');
+                addSystemMessage('🎬 Now viewing host\'s screen!');
+                
+                // Auto-play video
+                document.getElementById('remoteVideo').play().catch(error => {
+                    console.warn('Auto-play prevented:', error);
+                });
+            });
+            
+            // Handle data channel for chat
+            peer.on('data', (data) => {
+                const message = JSON.parse(data.toString());
+                if (message.type === 'chat') {
+                    addReceivedMessage(message.text);
+                }
+            });
+            
+            // Handle errors
+            peer.on('error', (error) => {
+                console.error('❌ WebRTC error:', error);
+                addSystemMessage(`❌ WebRTC error: ${error.message}`);
+            });
+            
+            // Handle close
+            peer.on('close', () => {
+                console.log('🔌 WebRTC connection closed');
+                document.getElementById('streamStatusDot').className = 'status-dot';
+                document.getElementById('streamStatusText').textContent = 'Stream ended';
+            });
+            
+            // Signal the offer from host
+            peer.signal(offer);
+        }
+        
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message) return;
+            
+            // Send via WebRTC if connected
+            if (peer && peer.connected) {
+                try {
+                    peer.send(JSON.stringify({
+                        type: 'chat',
+                        text: message,
+                        timestamp: Date.now()
+                    }));
+                    
+                    addSentMessage(message);
+                    input.value = '';
+                    
+                } catch (error) {
+                    console.error('Error sending via WebRTC:', error);
+                    sendViaWebSocket(message);
+                }
+            } else {
+                // Fallback to WebSocket
+                sendViaWebSocket(message);
+            }
+        }
+        
+        function sendViaWebSocket(message) {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'chat',
+                    room: roomId,
+                    message: message
+                }));
+                
+                addSentMessage(message);
+                document.getElementById('chatInput').value = '';
+            }
+        }
+        
+        function disconnectFromHost() {
+            console.log('🔌 Disconnecting from host...');
+            
+            if (peer) {
+                peer.destroy();
+                peer = null;
+            }
+            
+            if (socket) {
+                socket.close();
+                socket = null;
+           
