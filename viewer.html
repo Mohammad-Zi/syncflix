@@ -1,691 +1,561 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>👁️ SyncFlix Viewer - LIVE</title>
+    <title>SyncFlix - WebRTC Screen Sharing</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
-        body { background: #000; color: white; padding: 20px; }
-        
-        .container { max-width: 1000px; margin: 0 auto; }
-        
-        .header { text-align: center; margin-bottom: 30px; }
-        h1 { color: #4CAF50; }
-        
-        .connection-panel {
-            background: #111;
-            border-radius: 10px;
-            padding: 30px;
-            margin: 20px auto;
-            max-width: 500px;
-            text-align: center;
-        }
-        
-        .room-input {
-            width: 100%;
-            padding: 15px;
-            background: #222;
-            border: 2px solid #444;
-            border-radius: 8px;
-            color: white;
-            font-size: 18px;
-            text-align: center;
-            margin: 20px 0;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-        
-        .btn {
-            padding: 15px 30px;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: all 0.3s;
-            margin: 10px 5px;
-        }
-        
-        .btn-connect {
-            background: #4CAF50;
-            color: white;
-            width: 100%;
-        }
-        
-        .btn-disconnect {
-            background: #f44336;
-            color: white;
-        }
-        
-        .main-content {
-            display: none;
-            gap: 30px;
-            margin-bottom: 30px;
-        }
-        
-        .connected .main-content {
-            display: flex;
-        }
-        
-        @media (max-width: 768px) {
-            .main-content { flex-direction: column; }
-        }
-        
-        .video-section { flex: 2; }
-        
-        .video-container {
-            background: #111;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-            min-height: 400px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        #remoteVideo {
-            max-width: 100%;
-            max-height: 500px;
-            border-radius: 5px;
-            background: #000;
-        }
-        
-        .no-video {
-            text-align: center;
-            color: #888;
-        }
-        
-        .sidebar { 
-            flex: 1; 
-            min-width: 300px; 
-        }
-        
-        .panel {
-            background: #111;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        
-        .panel h3 {
-            color: #4CAF50;
-            margin-bottom: 15px;
-        }
-        
-        .connection-status {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-        
-        .status-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #f44336;
-        }
-        
-        .status-dot.connected {
-            background: #4CAF50;
-            box-shadow: 0 0 15px #4CAF50;
-        }
-        
-        .status-dot.streaming {
-            background: #2196F3;
-            box-shadow: 0 0 15px #2196F3;
-        }
-        
-        .chat-messages {
-            height: 300px;
-            overflow-y: auto;
-            background: #000;
-            border-radius: 5px;
-            padding: 15px;
-            margin-bottom: 15px;
-        }
-        
-        .message {
-            margin-bottom: 10px;
-            padding: 10px 15px;
-            border-radius: 10px;
-            max-width: 90%;
-            word-wrap: break-word;
-        }
-        
-        .message.sent {
-            background: #4CAF50;
-            margin-left: auto;
-            margin-right: 10px;
-        }
-        
-        .message.received {
-            background: #333;
-            margin-right: auto;
-            margin-left: 10px;
-        }
-        
-        .message.system {
-            background: #FF9800;
-            color: #000;
-            text-align: center;
-            margin: 5px auto;
-            padding: 8px 12px;
-            font-size: 14px;
-        }
-        
-        .chat-input {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .chat-input input {
-            flex: 1;
-            padding: 12px;
-            background: #222;
-            border: 1px solid #444;
-            border-radius: 5px;
-            color: white;
-            font-size: 16px;
-        }
-        
-        .chat-input button {
-            padding: 12px 25px;
-            background: #4CAF50;
-            border: none;
-            border-radius: 5px;
-            color: white;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        
-        .notification {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: #333;
-            color: white;
-            padding: 15px 20px;
-            border-radius: 8px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            transform: translateX(150%);
-            transition: transform 0.3s;
-            z-index: 1000;
-            max-width: 400px;
-        }
-        
-        .notification.show {
-            transform: translateX(0);
-        }
-        
-        .notification.success {
-            background: #4CAF50;
-        }
-        
-        .notification.error {
-            background: #f44336;
-        }
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #container { display: flex; flex-wrap: wrap; gap: 20px; }
+        .video-container { width: 400px; border: 2px solid #ccc; padding: 10px; }
+        video { width: 100%; background: #000; }
+        .controls { margin: 10px 0; }
+        button { margin: 5px; padding: 8px 16px; cursor: pointer; }
+        .status { padding: 10px; margin: 5px 0; border-radius: 5px; }
+        .connected { background: #d4edda; }
+        .disconnected { background: #f8d7da; }
+        .message { background: #fff3cd; padding: 5px; margin: 2px 0; font-size: 12px; }
     </style>
 </head>
 <body>
-    <div class="container" id="appContainer">
-        <div class="header">
-            <h1>👁️ SyncFlix Viewer - LIVE</h1>
-            <p>Watch your partner's screen - REAL WebRTC</p>
-        </div>
-        
-        <div id="connectionPanel" class="connection-panel">
-            <h2>🔗 Connect to Partner</h2>
-            <p>Enter the Room ID from your partner:</p>
-            <input type="text" id="roomInput" class="room-input" placeholder="Enter 6-character Room ID" maxlength="6">
-            <button id="connectBtn" class="btn btn-connect">Connect to Partner</button>
-            
-            <div class="connection-status" style="margin-top: 20px;">
-                <div class="status-dot" id="statusDot"></div>
-                <span id="statusText">Ready to connect</span>
-            </div>
-        </div>
-        
-        <div class="main-content">
-            <div class="video-section">
-                <div class="video-container">
-                    <video id="remoteVideo" autoplay playsinline></video>
-                    <div class="no-video" id="noVideo">
-                        <div>🎬 Connected to Partner</div>
-                        <p>Waiting for host to share screen...</p>
-                    </div>
-                </div>
-                
-                <div style="text-align: center;">
-                    <button id="disconnectBtn" class="btn btn-disconnect">Disconnect</button>
-                </div>
-            </div>
-            
-            <div class="sidebar">
-                <div class="panel">
-                    <h3>🔗 Connection Status</h3>
-                    <div class="connection-status">
-                        <div class="status-dot" id="streamStatusDot"></div>
-                        <span id="streamStatusText">Waiting for stream...</span>
-                    </div>
-                    <p style="color: #888; font-size: 14px; margin-top: 10px;">
-                        Room: <span id="connectedRoom">-----</span>
-                    </p>
-                </div>
-                
-                <div class="panel">
-                    <h3>💬 Live Chat</h3>
-                    <div class="chat-messages" id="chatMessages">
-                        <div class="message system">Connect to partner to chat</div>
-                    </div>
-                    <div class="chat-input">
-                        <input type="text" id="chatInput" placeholder="Type a message...">
-                        <button id="sendBtn">Send</button>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <h1>🎬 SyncFlix - WebRTC Screen Sharing</h1>
+    
+    <div class="controls">
+        <input type="text" id="roomId" placeholder="Room ID" value="test-room">
+        <input type="text" id="username" placeholder="Your Name" value="User">
+        <button onclick="connect()">Connect to Room</button>
+        <button onclick="startScreenShare()" id="screenShareBtn">Start Screen Sharing</button>
+        <button onclick="startCamera()" id="cameraBtn">Start Camera</button>
+        <button onclick="disconnect()">Disconnect</button>
     </div>
     
-    <div class="notification" id="notification">
-        <span id="notificationText">Ready</span>
+    <div id="status" class="status disconnected">Disconnected</div>
+    
+    <div id="messages"></div>
+    
+    <h3>👥 Users in Room:</h3>
+    <div id="userList"></div>
+    
+    <div id="container">
+        <div class="video-container">
+            <h4>My Screen/Camera</h4>
+            <video id="localVideo" autoplay muted playsinline></video>
+            <div id="localInfo"></div>
+        </div>
+        <div id="remoteVideos"></div>
     </div>
-
-    <!-- Simple Peer for WebRTC -->
-    <script src="https://cdn.jsdelivr.net/npm/simple-peer@9.11.0/simplepeer.min.js"></script>
-
+    
     <script>
-        // REAL WebRTC Viewer
-        let socket = null;
-        let peer = null;
+        // Configuration
+        const SIGNALING_SERVER = 'wss://syncflix-r5ak.onrender.com';
+        
+        // Global variables
+        let ws = null;
+        let userId = null;
+        let localStream = null;
+        let peerConnections = {};
         let roomId = '';
         let username = '';
         
-        // Initialize
-        initializeApp();
+        // STUN/TURN servers (you should use your own for production)
+        const iceServers = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' }
+            ]
+        };
         
-        function initializeApp() {
-            // Generate random username
-            username = `Viewer_${Math.random().toString(36).substring(2, 6)}`;
+        // Connect to signaling server
+        function connect() {
+            roomId = document.getElementById('roomId').value.trim();
+            username = document.getElementById('username').value.trim();
             
-            // Event listeners
-            document.getElementById('connectBtn').addEventListener('click', connectToHost);
-            document.getElementById('disconnectBtn').addEventListener('click', disconnectFromHost);
-            document.getElementById('sendBtn').addEventListener('click', sendMessage);
-            document.getElementById('chatInput').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') sendMessage();
-            });
-            
-            // Auto-uppercase room input
-            document.getElementById('roomInput').addEventListener('input', function() {
-                this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-            });
-        }
-        
-        function connectToHost() {
-            roomId = document.getElementById('roomInput').value.trim().toUpperCase();
-            
-            if (!roomId || roomId.length !== 6) {
-                showNotification('Please enter a valid 6-character Room ID', 'error');
-                document.getElementById('roomInput').focus();
+            if (!roomId) {
+                alert('Please enter a room ID');
                 return;
             }
             
-            console.log(`🔗 Connecting to room: ${roomId} as ${username}`);
+            if (!username) {
+                username = 'User' + Math.floor(Math.random() * 1000);
+            }
             
-            // Update UI
-            document.getElementById('connectBtn').disabled = true;
-            document.getElementById('connectBtn').textContent = 'Connecting...';
-            updateStatus('Connecting to server...');
+            const wsUrl = `${SIGNALING_SERVER}/ws?room=${roomId}&username=${username}`;
+            ws = new WebSocket(wsUrl);
             
-            addSystemMessage(`Connecting to room ${roomId}...`);
-            
-            // Connect to WebSocket server
-            connectWebSocket();
-        }
-        
-        function connectWebSocket() {
-            // ✅ FIXED: Use wss:// not https://
-            const wsUrl = `wss://syncflix-r5ak.onrender.com/ws?room=${roomId}&username=${encodeURIComponent(username)}`;
-            console.log('Connecting to:', wsUrl);
-            
-            socket = new WebSocket(wsUrl);
-            
-            socket.onopen = () => {
-                console.log('✅ Connected to signaling server');
-                showNotification('Connected to server');
+            ws.onopen = () => {
+                updateStatus('✅ Connected to signaling server', 'connected');
+                logMessage('Connected to room: ' + roomId);
                 
-                // Join room as viewer
-                socket.send(JSON.stringify({
+                // Send join message
+                ws.send(JSON.stringify({
                     type: 'join',
-                    room: roomId,
-                    role: 'viewer',
-                    username: username
+                    timestamp: Date.now()
                 }));
-                
-                addSystemMessage('✅ Connected to signaling server');
             };
             
-            socket.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    console.log('📨 Received:', data.type, data);
-                    
-                    switch(data.type) {
-                        case 'joined':
-                            addSystemMessage(`Joined room ${data.room} as ${username}`);
-                            updateStatus('Waiting for host...');
-                            break;
-                            
-                        case 'user_joined':
-                            if (data.role === 'host') {
-                                addSystemMessage(`👑 Host connected: ${data.username}`);
-                                showNotification('Host connected!');
-                                updateStatus('Host connected');
-                            }
-                            break;
-                            
-                        case 'user_left':
-                            if (data.role === 'host') {
-                                addSystemMessage('👑 Host disconnected');
-                                showNotification('Host disconnected', 'error');
-                                updateStatus('Host disconnected');
-                                
-                                if (peer) {
-                                    peer.destroy();
-                                    peer = null;
-                                }
-                                
-                                // Reset video
-                                document.getElementById('remoteVideo').srcObject = null;
-                                document.getElementById('noVideo').style.display = 'block';
-                            }
-                            break;
-                            
-                        case 'offer':
-                            console.log('📡 Received WebRTC offer from host');
-                            addSystemMessage('Receiving WebRTC offer...');
-                            if (!peer) {
-                                startWebRTC(data.offer);
-                            }
-                            break;
-                            
-                        case 'candidate':
-                            console.log('📡 Received ICE candidate');
-                            if (peer) {
-                                peer.signal(data.candidate);
-                            }
-                            break;
-                            
-                        case 'chat':
-                            addReceivedMessage(`${data.username}: ${data.text || data.message}`);
-                            break;
-                    }
-                } catch (error) {
-                    console.error('Error parsing WebSocket message:', error);
-                }
+            ws.onmessage = handleSignalingMessage;
+            
+            ws.onclose = () => {
+                updateStatus('❌ Disconnected from server', 'disconnected');
+                logMessage('Disconnected');
+                cleanup();
             };
             
-            socket.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                showNotification('Connection error', 'error');
-                updateStatus('Connection error');
-                
-                // Reset UI
-                document.getElementById('connectBtn').disabled = false;
-                document.getElementById('connectBtn').textContent = 'Connect to Partner';
-            };
-            
-            socket.onclose = () => {
-                console.log('WebSocket closed');
-                showNotification('Disconnected from server', 'error');
-                updateStatus('Disconnected');
+            ws.onerror = (error) => {
+                logMessage('WebSocket error: ' + error);
             };
         }
         
-        function startWebRTC(offer) {
-            console.log('🌐 Starting WebRTC with host offer:', offer);
-            
-            // Destroy existing peer if any
-            if (peer) {
-                peer.destroy();
-                peer = null;
+        // Handle signaling messages
+        function handleSignalingMessage(event) {
+            try {
+                const data = JSON.parse(event.data);
+                logMessage(`Received: ${data.type}`);
+                
+                switch(data.type) {
+                    case 'welcome':
+                        userId = data.userId;
+                        updateStatus(`✅ Connected as ${username} (ID: ${userId})`, 'connected');
+                        logMessage(`Room: ${data.room}, Host: ${data.isHost ? 'Yes' : 'No'}`);
+                        break;
+                        
+                    case 'existing-users':
+                        logMessage(`Found ${data.users.length} existing user(s)`);
+                        data.users.forEach(user => {
+                            createPeerConnection(user.id, user.username);
+                        });
+                        updateUserList(data.users);
+                        break;
+                        
+                    case 'user-joined':
+                        logMessage(`👤 ${data.username} joined the room`);
+                        createPeerConnection(data.userId, data.username);
+                        break;
+                        
+                    case 'user-left':
+                        logMessage(`👋 ${data.username} left the room`);
+                        removePeerConnection(data.userId);
+                        break;
+                        
+                    case 'offer':
+                        handleOffer(data.sender, data.sdp, data.senderName);
+                        break;
+                        
+                    case 'answer':
+                        handleAnswer(data.sender, data.sdp);
+                        break;
+                        
+                    case 'ice-candidate':
+                        handleIceCandidate(data.sender, data.candidate);
+                        break;
+                        
+                    case 'users-list':
+                        updateUserList(data.users);
+                        break;
+                        
+                    case 'error':
+                        logMessage(`Error: ${data.message}`);
+                        break;
+                        
+                    default:
+                        logMessage(`Unknown message type: ${data.type}`);
+                }
+            } catch (error) {
+                logMessage('Error parsing message: ' + error);
             }
-            
-            // Create SimplePeer instance with TURN servers
-            peer = new SimplePeer({
-                initiator: false,
-                trickle: true,
-                config: {
-                    iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun1.l.google.com:19302' },
-                        { urls: 'stun:stun2.l.google.com:19302' },
-                        { 
-                            urls: 'turn:numb.viagenie.ca:3478',
-                            credential: 'muazkh',
-                            username: 'webrtc@live.com'
-                        },
-                        {
-                            urls: 'turn:openrelay.metered.ca:80',
-                            username: 'openrelayproject',
-                            credential: 'openrelayproject'
-                        }
-                    ]
+        }
+        
+        // Start screen sharing
+        async function startScreenShare() {
+            try {
+                // Stop existing stream
+                if (localStream) {
+                    localStream.getTracks().forEach(track => track.stop());
                 }
-            });
-            
-            // Handle signaling data
-            peer.on('signal', (data) => {
-                console.log('📤 WebRTC signal:', data.type);
                 
-                if (socket && socket.readyState === WebSocket.OPEN) {
-                    if (data.type === 'answer') {
-                        console.log('📤 Sending WebRTC answer to host');
-                        socket.send(JSON.stringify({
-                            type: 'answer',
-                            room: roomId,
-                            answer: data
-                        }));
-                    } else if (data.candidate) {
-                        socket.send(JSON.stringify({
-                            type: 'candidate',
-                            room: roomId,
-                            candidate: data
-                        }));
-                    }
-                }
-            });
-            
-            // WebRTC connected
-            peer.on('connect', () => {
-                console.log('✅ WebRTC connected to host!');
-                addSystemMessage('✅ WebRTC connection established');
-                showNotification('WebRTC connected!');
-                
-                // Show connected UI
-                document.getElementById('appContainer').classList.add('connected');
-                document.getElementById('connectedRoom').textContent = roomId;
-                document.getElementById('connectionPanel').style.display = 'none';
-                
-                document.getElementById('streamStatusDot').className = 'status-dot connected';
-                document.getElementById('streamStatusText').textContent = 'Connected to host';
-            });
-            
-            // Received stream from host
-            peer.on('stream', (stream) => {
-                console.log('🎬 Received host stream!', stream);
-                console.log('Stream tracks:', stream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled})));
-                
-                const video = document.getElementById('remoteVideo');
-                video.srcObject = stream;
-                document.getElementById('noVideo').style.display = 'none';
-                
-                document.getElementById('streamStatusDot').className = 'status-dot streaming';
-                document.getElementById('streamStatusText').textContent = 'Streaming host screen';
-                
-                showNotification('Now receiving host\'s screen!', 'success');
-                addSystemMessage('🎬 Now viewing host\'s screen!');
-                
-                // Auto-play video
-                video.play().catch(error => {
-                    console.warn('Auto-play prevented:', error);
-                    // Add play button overlay
-                    video.controls = true;
+                // Get screen share stream
+                localStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: {
+                        cursor: "always",
+                        displaySurface: "monitor"
+                    },
+                    audio: false
                 });
-            });
-            
-            // Handle data channel for chat
-            peer.on('data', (data) => {
-                try {
-                    const message = JSON.parse(data.toString());
-                    if (message.type === 'chat') {
-                        addReceivedMessage(`Host: ${message.text}`);
-                    }
-                } catch (error) {
-                    console.error('Error parsing data channel message:', error);
-                }
-            });
-            
-            // Handle errors
-            peer.on('error', (error) => {
-                console.error('❌ WebRTC error:', error);
-                addSystemMessage(`❌ WebRTC error: ${error.message}`);
-                showNotification('WebRTC error', 'error');
-            });
-            
-            // Handle close
-            peer.on('close', () => {
-                console.log('🔌 WebRTC connection closed');
-                document.getElementById('streamStatusDot').className = 'status-dot';
-                document.getElementById('streamStatusText').textContent = 'Stream ended';
-                addSystemMessage('🔌 WebRTC connection closed');
-            });
-            
-            // Signal the offer from host
-            console.log('📡 Signaling offer to peer...');
-            peer.signal(offer);
-        }
-        
-        function sendMessage() {
-            const input = document.getElementById('chatInput');
-            const message = input.value.trim();
-            if (!message) return;
-            
-            // Send via WebRTC if connected
-            if (peer && peer.connected) {
-                try {
-                    peer.send(JSON.stringify({
-                        type: 'chat',
-                        text: message,
-                        timestamp: Date.now()
-                    }));
-                    
-                    addSentMessage(message);
-                    input.value = '';
-                    
-                } catch (error) {
-                    console.error('Error sending via WebRTC:', error);
-                    sendViaWebSocket(message);
-                }
-            } else {
-                // Fallback to WebSocket
-                sendViaWebSocket(message);
+                
+                // Show local screen
+                const localVideo = document.getElementById('localVideo');
+                localVideo.srcObject = localStream;
+                document.getElementById('localInfo').innerHTML = '🖥️ Screen Sharing Active';
+                
+                // Update all peer connections with new stream
+                Object.keys(peerConnections).forEach(userId => {
+                    updatePeerTracks(userId);
+                });
+                
+                logMessage('✅ Screen sharing started');
+                document.getElementById('screenShareBtn').innerHTML = 'Stop Screen Sharing';
+                document.getElementById('screenShareBtn').onclick = stopScreenShare;
+                
+                // Handle when user stops sharing via browser UI
+                localStream.getVideoTracks()[0].onended = () => {
+                    stopScreenShare();
+                };
+                
+            } catch (error) {
+                logMessage('❌ Error starting screen share: ' + error.message);
             }
         }
         
-        function sendViaWebSocket(message) {
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({
-                    type: 'chat',
-                    room: roomId,
-                    message: message
+        // Stop screen sharing
+        function stopScreenShare() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+                
+                const localVideo = document.getElementById('localVideo');
+                localVideo.srcObject = null;
+                document.getElementById('localInfo').innerHTML = '';
+                
+                // Remove tracks from all peer connections
+                Object.keys(peerConnections).forEach(userId => {
+                    const pc = peerConnections[userId];
+                    if (pc) {
+                        const senders = pc.getSenders();
+                        senders.forEach(sender => {
+                            if (sender.track) {
+                                pc.removeTrack(sender);
+                            }
+                        });
+                    }
+                });
+                
+                logMessage('🛑 Screen sharing stopped');
+                document.getElementById('screenShareBtn').innerHTML = 'Start Screen Sharing';
+                document.getElementById('screenShareBtn').onclick = startScreenShare;
+            }
+        }
+        
+        // Start camera
+        async function startCamera() {
+            try {
+                if (localStream) {
+                    localStream.getTracks().forEach(track => track.stop());
+                }
+                
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: true
+                });
+                
+                const localVideo = document.getElementById('localVideo');
+                localVideo.srcObject = localStream;
+                document.getElementById('localInfo').innerHTML = '📷 Camera Active';
+                
+                // Update all peer connections
+                Object.keys(peerConnections).forEach(userId => {
+                    updatePeerTracks(userId);
+                });
+                
+                logMessage('✅ Camera started');
+                
+            } catch (error) {
+                logMessage('❌ Error starting camera: ' + error.message);
+            }
+        }
+        
+        // Create peer connection
+        async function createPeerConnection(targetUserId, targetUsername) {
+            if (peerConnections[targetUserId]) {
+                logMessage(`Already connected to ${targetUsername}`);
+                return;
+            }
+            
+            logMessage(`Creating connection to ${targetUsername}`);
+            
+            try {
+                // Create RTCPeerConnection
+                const pc = new RTCPeerConnection(iceServers);
+                peerConnections[targetUserId] = pc;
+                
+                // Add local stream if available
+                if (localStream) {
+                    updatePeerTracks(targetUserId);
+                }
+                
+                // Handle ICE candidates
+                pc.onicecandidate = (event) => {
+                    if (event.candidate && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'ice-candidate',
+                            target: targetUserId,
+                            candidate: event.candidate,
+                            timestamp: Date.now()
+                        }));
+                    }
+                };
+                
+                // Handle remote stream
+                pc.ontrack = (event) => {
+                    logMessage(`📥 Received stream from ${targetUsername}`);
+                    addRemoteVideo(targetUserId, targetUsername, event.streams[0]);
+                };
+                
+                // Handle connection state
+                pc.onconnectionstatechange = () => {
+                    logMessage(`Connection state with ${targetUsername}: ${pc.connectionState}`);
+                    if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+                        removeRemoteVideo(targetUserId);
+                    }
+                };
+                
+                // Create and send offer
+                const offer = await pc.createOffer({
+                    offerToReceiveAudio: true,
+                    offerToReceiveVideo: true
+                });
+                
+                await pc.setLocalDescription(offer);
+                
+                ws.send(JSON.stringify({
+                    type: 'offer',
+                    target: targetUserId,
+                    sdp: offer,
+                    timestamp: Date.now()
                 }));
                 
-                addSentMessage(message);
-                document.getElementById('chatInput').value = '';
+                logMessage(`📤 Sent offer to ${targetUsername}`);
+                
+            } catch (error) {
+                logMessage(`❌ Error creating peer connection: ${error.message}`);
+                delete peerConnections[targetUserId];
             }
         }
         
-        function disconnectFromHost() {
-            console.log('🔌 Disconnecting from host...');
+        // Handle incoming offer
+        async function handleOffer(senderId, sdp, senderName) {
+            logMessage(`📥 Received offer from ${senderName}`);
             
-            if (peer) {
-                peer.destroy();
-                peer = null;
+            try {
+                let pc = peerConnections[senderId];
+                if (!pc) {
+                    pc = new RTCPeerConnection(iceServers);
+                    peerConnections[senderId] = pc;
+                    
+                    // Add local stream if available
+                    if (localStream) {
+                        updatePeerTracks(senderId);
+                    }
+                    
+                    // Set up event handlers
+                    pc.onicecandidate = (event) => {
+                        if (event.candidate && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({
+                                type: 'ice-candidate',
+                                target: senderId,
+                                candidate: event.candidate,
+                                timestamp: Date.now()
+                            }));
+                        }
+                    };
+                    
+                    pc.ontrack = (event) => {
+                        logMessage(`📥 Received stream from ${senderName}`);
+                        addRemoteVideo(senderId, senderName, event.streams[0]);
+                    };
+                }
+                
+                await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+                
+                // Create and send answer
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                
+                ws.send(JSON.stringify({
+                    type: 'answer',
+                    target: senderId,
+                    sdp: answer,
+                    timestamp: Date.now()
+                }));
+                
+                logMessage(`📤 Sent answer to ${senderName}`);
+                
+            } catch (error) {
+                logMessage(`❌ Error handling offer: ${error.message}`);
+            }
+        }
+        
+        // Handle answer
+        async function handleAnswer(senderId, sdp) {
+            logMessage(`📥 Received answer from ${senderId}`);
+            
+            const pc = peerConnections[senderId];
+            if (pc) {
+                try {
+                    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+                } catch (error) {
+                    logMessage(`Error setting remote description: ${error.message}`);
+                }
+            }
+        }
+        
+        // Handle ICE candidate
+        async function handleIceCandidate(senderId, candidate) {
+            logMessage(`📥 Received ICE candidate from ${senderId}`);
+            
+            const pc = peerConnections[senderId];
+            if (pc) {
+                try {
+                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                } catch (error) {
+                    logMessage(`Error adding ICE candidate: ${error.message}`);
+                }
+            }
+        }
+        
+        // Update peer tracks
+        function updatePeerTracks(targetUserId) {
+            const pc = peerConnections[targetUserId];
+            if (!pc || !localStream) return;
+            
+            // Remove existing tracks
+            const senders = pc.getSenders();
+            senders.forEach(sender => {
+                if (sender.track) {
+                    pc.removeTrack(sender);
+                }
+            });
+            
+            // Add new tracks
+            localStream.getTracks().forEach(track => {
+                pc.addTrack(track, localStream);
+            });
+        }
+        
+        // Add remote video element
+        function addRemoteVideo(userId, username, stream) {
+            // Remove existing video if any
+            const existingVideo = document.getElementById(`remote-video-${userId}`);
+            if (existingVideo) {
+                existingVideo.parentElement.remove();
             }
             
-            if (socket) {
-                socket.close();
-                socket = null;
-            }
+            // Create new video container
+            const container = document.createElement('div');
+            container.className = 'video-container';
+            container.id = `remote-container-${userId}`;
             
-            // Reset UI
-            document.getElementById('appContainer').classList.remove('connected');
-            document.getElementById('connectionPanel').style.display = 'block';
+            // Add title
+            const title = document.createElement('h4');
+            title.innerHTML = `👤 ${username}`;
+            container.appendChild(title);
             
-            document.getElementById('connectBtn').disabled = false;
-            document.getElementById('connectBtn').textContent = 'Connect to Partner';
+            // Add video element
+            const video = document.createElement('video');
+            video.id = `remote-video-${userId}`;
+            video.autoplay = true;
+            video.playsinline = true;
+            video.srcObject = stream;
+            container.appendChild(video);
             
-            document.getElementById('roomInput').value = '';
-            document.getElementById('roomInput').focus();
-            
-            document.getElementById('remoteVideo').srcObject = null;
-            document.getElementById('noVideo').style.display = 'block';
-            
-            updateStatus('Disconnected');
-            document.getElementById('streamStatusDot').className = 'status-dot';
-            document.getElementById('streamStatusText').textContent = 'Not streaming';
-            
-            showNotification('Disconnected from host');
-            addSystemMessage('🔌 Disconnected from host');
+            // Add to DOM
+            document.getElementById('remoteVideos').appendChild(container);
         }
         
-        function updateStatus(text) {
-            document.getElementById('statusText').textContent = text;
-            
-            if (text.includes('connected')) {
-                document.getElementById('statusDot').className = 'status-dot connected';
-            } else {
-                document.getElementById('statusDot').className = 'status-dot';
+        // Remove remote video
+        function removeRemoteVideo(userId) {
+            const container = document.getElementById(`remote-container-${userId}`);
+            if (container) {
+                container.remove();
             }
         }
         
-        function addSystemMessage(text) {
-            addMessage(text, 'system');
+        // Remove peer connection
+        function removePeerConnection(userId) {
+            const pc = peerConnections[userId];
+            if (pc) {
+                pc.close();
+                delete peerConnections[userId];
+            }
+            removeRemoteVideo(userId);
         }
         
-        function addSentMessage(text) {
-            addMessage(`You: ${text}`, 'sent');
-        }
-        
-        function addReceivedMessage(text) {
-            addMessage(text, 'received');
-        }
-        
-        function addMessage(text, type) {
-            const chat = document.getElementById('chatMessages');
-            const msg = document.createElement('div');
-            msg.className = `message ${type}`;
-            msg.textContent = text;
-            chat.appendChild(msg);
-            chat.scrollTop = chat.scrollHeight;
-        }
-        
-        function showNotification(text, type = 'success') {
-            const notification = document.getElementById('notification');
-            document.getElementById('notificationText').textContent = text;
-            notification.className = `notification ${type} show`;
+        // Update user list
+        function updateUserList(users) {
+            const userList = document.getElementById('userList');
+            userList.innerHTML = '';
             
-            setTimeout(() => {
-                notification.classList.remove('show');
-            }, 3000);
+            users.forEach(user => {
+                const div = document.createElement('div');
+                div.innerHTML = `${user.username} ${user.isHost ? '👑' : ''} <small>(${user.id})</small>`;
+                userList.appendChild(div);
+            });
         }
+        
+        // Update status
+        function updateStatus(message, className) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${className}`;
+        }
+        
+        // Log message
+        function logMessage(message) {
+            const messagesDiv = document.getElementById('messages');
+            const msgElement = document.createElement('div');
+            msgElement.className = 'message';
+            msgElement.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
+            messagesDiv.prepend(msgElement);
+            
+            // Keep only last 20 messages
+            const allMessages = messagesDiv.getElementsByClassName('message');
+            if (allMessages.length > 20) {
+                messagesDiv.removeChild(allMessages[allMessages.length - 1]);
+            }
+        }
+        
+        // Cleanup
+        function cleanup() {
+            // Close all peer connections
+            Object.keys(peerConnections).forEach(userId => {
+                removePeerConnection(userId);
+            });
+            peerConnections = {};
+            
+            // Stop local stream
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            
+            // Clear local video
+            const localVideo = document.getElementById('localVideo');
+            localVideo.srcObject = null;
+            document.getElementById('localInfo').innerHTML = '';
+            
+            // Clear remote videos
+            document.getElementById('remoteVideos').innerHTML = '';
+            document.getElementById('userList').innerHTML = '';
+            
+            // Reset buttons
+            document.getElementById('screenShareBtn').innerHTML = 'Start Screen Sharing';
+            document.getElementById('screenShareBtn').onclick = startScreenShare;
+        }
+        
+        // Disconnect
+        function disconnect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+            cleanup();
+            updateStatus('Disconnected', 'disconnected');
+        }
+        
+        // Auto-connect on page load (optional)
+        // window.addEventListener('load', () => {
+        //     // Uncomment to auto-connect
+        //     // connect();
+        // });
     </script>
 </body>
 </html>
