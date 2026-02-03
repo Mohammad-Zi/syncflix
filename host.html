@@ -522,6 +522,26 @@
             localStream.getTracks().map((t) => t.kind),
           );
 
+          // Function to check and start WebRTC automatically
+
+
+          function checkAndStartWebRTC() {
+              console.log('🔄 Checking if WebRTC should start...');
+              console.log('  - Local stream:', localStream ? 'Yes' : 'No');
+              console.log('  - Viewer connected:', viewerConnected);
+              console.log('  - Peer already exists:', peer ? 'Yes' : 'No');
+
+              if (localStream && viewerConnected && !peer) {
+                  console.log('✅ All conditions met! Starting WebRTC...');
+                   startWebRTC();
+                    return true;
+               }
+             return false;
+           }
+
+           // Call this whenever viewer connects
+            // Update the user_joined case in socket.onmessage:
+
           // Show local video
           document.getElementById("localVideo").srcObject = localStream;
           document.getElementById("noVideo").style.display = "none";
@@ -534,12 +554,34 @@
           showNotification("Screen sharing active");
 
           // Start WebRTC if viewer is already connected
-          if (viewerConnected) {
-            startWebRTC();
-          } else {
-            addSystemMessage("⏳ Waiting for viewer to connect...");
-          }
+          setTimeout(() => {
+            if (viewerConnected) {
+              console.log("🎬 Viewer is already connected, starting WebRTC...");
+              startWebRTC();
+            } else {
+              console.log("⏳ Waiting for viewer to connect...");
+              addSystemMessage("⏳ Waiting for viewer to connect...");
 
+              // Listen for viewer connection
+              const checkViewerInterval = setInterval(() => {
+                if (viewerConnected) {
+                  console.log("✅ Viewer connected! Starting WebRTC...");
+                  startWebRTC();
+                  clearInterval(checkViewerInterval);
+                }
+              }, 1000);
+
+              // Stop checking after 30 seconds
+              setTimeout(() => {
+                clearInterval(checkViewerInterval);
+                if (!viewerConnected) {
+                  addSystemMessage(
+                    "⏰ No viewer connected yet. Share Room ID: " + roomId,
+                  );
+                }
+              }, 30000);
+            }
+          }, 500);
           // Handle when user stops sharing via browser UI
           localStream.getVideoTracks()[0].onended = () => {
             console.log("Screen sharing stopped by browser");
