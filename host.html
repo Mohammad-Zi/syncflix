@@ -305,6 +305,7 @@
         let peer = null;
         let localStream = null;
         let dataChannel = null;
+        let viewerConnected = false;
         
         // Initialize
         initializeApp();
@@ -339,8 +340,11 @@
         }
         
         function connectWebSocket() {
-            // Connect to WebSocket server
-            socket = new WebSocket(`https://syncflix-r5ak.onrender.com/ws?room=${roomId}&username=Host`);
+            // ✅ FIXED: Use wss:// not https://
+            const wsUrl = `wss://syncflix-r5ak.onrender.com/ws?room=${roomId}&username=Host`;
+            console.log('Connecting to:', wsUrl);
+            
+            socket = new WebSocket(wsUrl);
             
             socket.onopen = () => {
                 console.log('✅ Connected to signaling server');
@@ -356,62 +360,64 @@
             };
             
             socket.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                console.log('📨 Received:', data);
-                
-                switch(data.type) {
-                    case 'joined':
-                        addSystemMessage(`Joined room ${roomId}`);
-                        break;
-                        
-                    case 'user_joined':
-                        addSystemMessage(`👤 Partner connected`);
-                        showNotification('Partner connected!');
-                        updateStatus('Partner connected');
-                        
-                        // If we're already sharing, start WebRTC
-                        if (localStream) {
-                            startWebRTC();
-                        }
-                        break;
-                        
-                    case 'user_left':
-                        addSystemMessage(`👤 Partner disconnected`);
-                        showNotification('Partner disconnected');
-                        updateStatus('Waiting for partner...');
-                        
-                        if (peer) {
-                            peer.destroy();
-                            peer = null;
-                        }
-                        disableChat();
-                        break;
-                        
-                    case 'offer':
-                        // Handle WebRTC offer from viewer
-                        if (peer) {
-                            peer.signal(data.offer);
-                        }
-                        break;
-                        
-                    case 'answer':
-                        // Handle WebRTC answer from viewer
-                        if (peer) {
-                            peer.signal(data.answer);
-                        }
-                        break;
-                        
-                    case 'candidate':
-                        // Handle ICE candidate
-                        if (peer) {
-                            peer.signal(data.candidate);
-                        }
-                        break;
-                        
-                    case 'chat':
-                        // Handle chat message
-                        addReceivedMessage(data.message);
-                        break;
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('📨 Received:', data.type, data);
+                    
+                    switch(data.type) {
+                        case 'joined':
+                            addSystemMessage(`Joined room ${roomId}`);
+                            break;
+                            
+                        case 'user_joined':
+                            if (data.role === 'viewer') {
+                                addSystemMessage(`👤 Viewer connected: ${data.username}`);
+                                showNotification('Viewer connected!');
+                                updateStatus('Viewer connected');
+                                viewerConnected = true;
+                                
+                                // If we're already sharing, start WebRTC
+                                if (localStream) {
+                                    startWebRTC();
+                                }
+                            }
+                            break;
+                            
+                        case 'user_left':
+                            if (data.role === 'viewer') {
+                                addSystemMessage(`👤 Viewer disconnected`);
+                                showNotification('Viewer disconnected');
+                                updateStatus('Waiting for partner...');
+                                viewerConnected = false;
+                                
+                                if (peer) {
+                                    peer.destroy();
+                                    peer = null;
+                                }
+                                disableChat();
+                            }
+                            break;
+                            
+                        case 'answer':
+                            console.log('📡 Received WebRTC answer from viewer');
+                            if (peer) {
+                                peer.signal(data.answer);
+                            }
+                            break;
+                            
+                        case 'candidate':
+                            console.log('📡 Received ICE candidate');
+                            if (peer) {
+                                peer.signal(data.candidate);
+                            }
+                            break;
+                            
+                        case 'chat':
+                            addReceivedMessage(`${data.username}: ${data.text || data.message}`);
+                            break;
+                    }
+                } catch (error) {
+                    console.error('Error parsing message:', error);
                 }
             };
             
@@ -438,11 +444,15 @@
                 // Get screen with audio
                 localStream = await navigator.mediaDevices.getDisplayMedia({
                     video: {
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 }
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        frameRate: { ideal: 30 }
                     },
                     audio: true
                 });
+                
+                console.log('🎬 Screen sharing started:', localStream);
+                console.log('Tracks:', localStream.getTracks().map(t => t.kind));
                 
                 // Show local video
                 document.getElementById('localVideo').srcObject = localStream;
@@ -456,10 +466,15 @@
                 showNotification('Screen sharing active');
                 
                 // Start WebRTC if viewer is already connected
-                startWebRTC();
+                if (viewerConnected) {
+                    startWebRTC();
+                } else {
+                    addSystemMessage('⏳ Waiting for viewer to connect...');
+                }
                 
                 // Handle when user stops sharing via browser UI
                 localStream.getVideoTracks()[0].onended = () => {
+                    console.log('Screen sharing stopped by browser');
                     stopScreenSharing();
                     showNotification('Screen sharing stopped by browser');
                 };
@@ -472,6 +487,8 @@
         }
         
         function stopScreenSharing() {
+            console.log('🛑 Stopping screen sharing');
+            
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
                 localStream = null;
@@ -494,19 +511,39 @@
         }
         
         function startWebRTC() {
-            if (!localStream) return;
+            if (!localStream) {
+                console.error('❌ No local stream to share');
+                return;
+            }
             
             console.log('🌐 Starting WebRTC connection...');
             
-            // Create SimplePeer instance
+            // Destroy existing peer if any
+            if (peer) {
+                peer.destroy();
+                peer = null;
+            }
+            
+            // Create SimplePeer instance with TURN servers
             peer = new SimplePeer({
                 initiator: true,
                 stream: localStream,
+                trickle: true,
                 config: {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
                         { urls: 'stun:stun1.l.google.com:19302' },
-                        { urls: 'stun:stun2.l.google.com:19302' }
+                        { urls: 'stun:stun2.l.google.com:19302' },
+                        { 
+                            urls: 'turn:numb.viagenie.ca:3478',
+                            credential: 'muazkh',
+                            username: 'webrtc@live.com'
+                        },
+                        {
+                            urls: 'turn:openrelay.metered.ca:80',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        }
                     ]
                 }
             });
@@ -517,16 +554,11 @@
                 
                 if (socket && socket.readyState === WebSocket.OPEN) {
                     if (data.type === 'offer') {
+                        console.log('📤 Sending WebRTC offer to viewer');
                         socket.send(JSON.stringify({
                             type: 'offer',
                             room: roomId,
                             offer: data
-                        }));
-                    } else if (data.type === 'answer') {
-                        socket.send(JSON.stringify({
-                            type: 'answer',
-                            room: roomId,
-                            answer: data
                         }));
                     } else if (data.candidate) {
                         socket.send(JSON.stringify({
@@ -540,31 +572,27 @@
             
             // WebRTC connected
             peer.on('connect', () => {
-                console.log('✅ WebRTC connected!');
+                console.log('✅ WebRTC connected to viewer!');
                 addSystemMessage('✅ WebRTC connection established');
                 showNotification('WebRTC connected!');
                 enableChat();
-            });
-            
-            // Handle data channel for chat
-            peer.on('data', (data) => {
-                const message = JSON.parse(data.toString());
-                if (message.type === 'chat') {
-                    addReceivedMessage(message.text);
-                }
             });
             
             // Handle errors
             peer.on('error', (error) => {
                 console.error('❌ WebRTC error:', error);
                 addSystemMessage(`❌ WebRTC error: ${error.message}`);
+                showNotification('WebRTC connection failed', 'error');
             });
             
             // Handle close
             peer.on('close', () => {
                 console.log('🔌 WebRTC connection closed');
                 disableChat();
+                addSystemMessage('🔌 WebRTC connection closed');
             });
+            
+            console.log('🎯 WebRTC peer created, generating offer...');
         }
         
         function sendMessage() {
@@ -610,7 +638,7 @@
         function enableChat() {
             document.getElementById('chatInput').disabled = false;
             document.getElementById('sendBtn').disabled = false;
-            document.getElementById('chatInput').placeholder = "Chat with partner...";
+            document.getElementById('chatInput').placeholder = "Chat with viewer...";
             document.getElementById('chatInput').focus();
         }
         
@@ -639,7 +667,7 @@
         }
         
         function addReceivedMessage(text) {
-            addMessage(`Partner: ${text}`, 'received');
+            addMessage(`Viewer: ${text}`, 'received');
         }
         
         function addMessage(text, type) {
