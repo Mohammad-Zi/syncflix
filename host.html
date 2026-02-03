@@ -21,7 +21,7 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
         }
 
@@ -41,6 +41,20 @@
         .header p {
             font-size: 1.1rem;
             opacity: 0.9;
+        }
+
+        .debug-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            z-index: 1000;
         }
 
         .main-card {
@@ -166,6 +180,11 @@
             color: white;
         }
 
+        .btn-warning {
+            background: linear-gradient(to right, #f59e0b, #fbbf24);
+            color: white;
+        }
+
         .btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
@@ -193,6 +212,11 @@
             background: #10b981;
             box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
             animation: pulse 2s infinite;
+        }
+
+        .status-dot.connecting {
+            background: #f59e0b;
+            animation: pulse 1s infinite;
         }
 
         @keyframes pulse {
@@ -297,6 +321,10 @@
             font-weight: bold;
         }
 
+        .viewer-info {
+            flex: 1;
+        }
+
         .viewer-info h4 {
             margin-bottom: 4px;
             color: #1e293b;
@@ -307,42 +335,10 @@
             font-size: 0.9rem;
         }
 
-        .log-section {
-            background: #1e293b;
-            border-radius: 15px;
-            padding: 25px;
-            color: white;
-            margin-top: 30px;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-
-        .log-section h3 {
-            margin-bottom: 20px;
-            color: #e2e8f0;
+        .viewer-status {
             display: flex;
             align-items: center;
-            gap: 10px;
-        }
-
-        .log-entry {
-            padding: 10px 0;
-            border-bottom: 1px solid #334155;
-            font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 0.9rem;
-        }
-
-        .log-entry:last-child {
-            border-bottom: none;
-        }
-
-        .log-time {
-            color: #94a3b8;
-            margin-right: 15px;
-        }
-
-        .log-message {
-            color: #e2e8f0;
+            gap: 8px;
         }
 
         .connection-info {
@@ -356,13 +352,6 @@
             align-items: center;
         }
 
-        .connection-info h4 {
-            margin-bottom: 5px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
         .room-code {
             background: rgba(255, 255, 255, 0.2);
             padding: 8px 16px;
@@ -371,10 +360,107 @@
             font-size: 1.2rem;
             letter-spacing: 1px;
         }
+
+        /* Debug Panel */
+        .debug-panel {
+            background: #1e293b;
+            border-radius: 15px;
+            padding: 25px;
+            color: white;
+            margin-top: 30px;
+            max-height: 400px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .debug-panel.visible {
+            display: block;
+        }
+
+        .debug-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .debug-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .debug-entry {
+            padding: 10px 0;
+            border-bottom: 1px solid #334155;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+
+        .debug-entry:last-child {
+            border-bottom: none;
+        }
+
+        .debug-time {
+            color: #94a3b8;
+            margin-right: 15px;
+        }
+
+        .debug-message {
+            color: #e2e8f0;
+        }
+
+        .debug-info {
+            color: #60a5fa;
+        }
+
+        .debug-success {
+            color: #34d399;
+        }
+
+        .debug-warning {
+            color: #fbbf24;
+        }
+
+        .debug-error {
+            color: #f87171;
+        }
+
+        .debug-webrtc {
+            color: #a78bfa;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: white;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        <button class="debug-toggle" onclick="toggleDebug()">
+            <i class="fas fa-bug"></i> Debug
+        </button>
+
         <div class="header">
             <h1><i class="fas fa-broadcast-tower"></i> SyncFlix Host</h1>
             <p>Share your screen with viewers in real-time</p>
@@ -415,6 +501,9 @@
                         <button class="btn btn-danger" onclick="stopScreenShare()" id="stopBtn" disabled>
                             <i class="fas fa-stop"></i> Stop Sharing
                         </button>
+                        <button class="btn btn-warning" onclick="forceReconnect()" id="reconnectBtn" disabled>
+                            <i class="fas fa-sync-alt"></i> Reconnect All
+                        </button>
                     </div>
                 </div>
 
@@ -451,9 +540,38 @@
                     </div>
                 </div>
 
-                <div class="log-section">
-                    <h3><i class="fas fa-terminal"></i> Activity Log</h3>
-                    <div id="logContainer"></div>
+                <div class="debug-panel" id="debugPanel">
+                    <div class="debug-header">
+                        <h3><i class="fas fa-terminal"></i> Debug Log</h3>
+                        <div class="debug-controls">
+                            <button class="btn btn-primary" style="padding: 8px 15px; min-width: auto;" onclick="clearDebugLog()">
+                                <i class="fas fa-trash"></i> Clear
+                            </button>
+                            <button class="btn btn-primary" style="padding: 8px 15px; min-width: auto;" onclick="exportDebugLog()">
+                                <i class="fas fa-download"></i> Export
+                            </button>
+                        </div>
+                    </div>
+                    <div id="debugLog"></div>
+                    
+                    <div class="stats-grid" id="statsGrid">
+                        <div class="stat-card">
+                            <div class="stat-value" id="statConnections">0</div>
+                            <div class="stat-label">Active Connections</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="statIceState">-</div>
+                            <div class="stat-label">ICE State</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="statBitrate">0 kbps</div>
+                            <div class="stat-label">Bitrate</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="statFps">0</div>
+                            <div class="stat-label">FPS</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -464,18 +582,22 @@
         const SERVER = 'wss://syncflix-r5ak.onrender.com';
         let ws = null;
         let localStream = null;
-        let peerConnections = {};
+        let peerConnections = new Map();
         let userId = null;
         let roomId = null;
+        let statsInterval = null;
+        let debugMode = false;
 
         // DOM Elements
         const statusDot = document.getElementById('statusDot');
         const statusText = document.getElementById('statusText');
         const connectionInfo = document.getElementById('connectionInfo');
         const roomCodeDisplay = document.getElementById('roomCodeDisplay');
+        const debugPanel = document.getElementById('debugPanel');
+        const debugLog = document.getElementById('debugLog');
 
         // Connect as host
-        function connectAsHost() {
+        async function connectAsHost() {
             roomId = document.getElementById('roomId').value.trim();
             const username = document.getElementById('username').value.trim() || 'Host';
             
@@ -488,11 +610,14 @@
             ws = new WebSocket(url);
             
             updateStatus('Connecting to server...', 'connecting');
+            debugLogMessage('🔌 Connecting to WebSocket server...', 'info');
             
             ws.onopen = () => {
                 updateStatus('Connected as Host', 'connected');
+                debugLogMessage('✅ WebSocket connection established', 'success');
                 log('Connected to room: ' + roomId);
                 document.getElementById('shareBtn').disabled = false;
+                document.getElementById('reconnectBtn').disabled = false;
                 document.getElementById('connectBtn').disabled = true;
                 
                 // Show connection info
@@ -504,8 +629,9 @@
             
             ws.onmessage = handleMessage;
             
-            ws.onclose = () => {
+            ws.onclose = (event) => {
                 updateStatus('Disconnected from server', 'disconnected');
+                debugLogMessage(`❌ WebSocket closed: code=${event.code}, reason=${event.reason || 'No reason'}`, 'error');
                 log('Disconnected');
                 cleanup();
                 document.getElementById('connectBtn').disabled = false;
@@ -514,50 +640,49 @@
             
             ws.onerror = (error) => {
                 updateStatus('Connection error', 'error');
+                debugLogMessage('❌ WebSocket error: ' + error, 'error');
                 log('WebSocket error: ' + error);
             };
         }
 
         // Handle WebSocket messages
         function handleMessage(event) {
-            const data = JSON.parse(event.data);
-            log(`Received: ${data.type}`);
-            
-            switch(data.type) {
-                case 'welcome':
-                    userId = data.userId;
-                    updateStatus(`Connected as Host (ID: ${userId})`, 'connected');
-                    break;
-                    
-                case 'viewers-list':
-                    updateViewerList(data.viewers);
-                    break;
-                    
-                case 'viewer-joined':
-                    addViewer(data.viewerId, data.viewerName);
-                    showNotification(`${data.viewerName} joined the room`, 'info');
-                    break;
-                    
-                case 'viewer-left':
-                    removeViewer(data.viewerId);
-                    break;
-                    
-                case 'screen-request':
-                    log(`Screen request from ${data.viewerName}`);
-                    createPeerConnection(data.viewerId, data.viewerName);
-                    break;
-                    
-                case 'offer':
-                    handleOffer(data.sender, data.sdp);
-                    break;
-                    
-                case 'answer':
-                    handleAnswer(data.sender, data.sdp);
-                    break;
-                    
-                case 'ice-candidate':
-                    handleIceCandidate(data.sender, data.candidate);
-                    break;
+            try {
+                const data = JSON.parse(event.data);
+                debugLogMessage(`📨 Received: ${data.type}`, 'info');
+                
+                switch(data.type) {
+                    case 'welcome':
+                        userId = data.userId;
+                        updateStatus(`Connected as Host (ID: ${userId})`, 'connected');
+                        debugLogMessage(`✅ Welcome! User ID: ${userId}`, 'success');
+                        break;
+                        
+                    case 'screen-request':
+                        debugLogMessage(`📨 Screen request from ${data.viewerName} (${data.viewerId})`, 'webrtc');
+                        createPeerConnection(data.viewerId, data.viewerName);
+                        break;
+                        
+                    case 'answer':
+                        debugLogMessage(`📨 Received answer from ${data.sender}`, 'webrtc');
+                        handleAnswer(data.sender, data.sdp);
+                        break;
+                        
+                    case 'ice-candidate':
+                        debugLogMessage(`📨 Received ICE candidate from ${data.sender}`, 'webrtc');
+                        handleIceCandidate(data.sender, data.candidate);
+                        break;
+                        
+                    case 'viewer-left':
+                        debugLogMessage(`👋 Viewer ${data.viewerId} left`, 'info');
+                        removeViewer(data.viewerId);
+                        break;
+                        
+                    default:
+                        debugLogMessage(`📨 Unknown message type: ${data.type}`, 'warning');
+                }
+            } catch (error) {
+                debugLogMessage('❌ Error parsing message: ' + error, 'error');
             }
         }
 
@@ -565,19 +690,29 @@
         async function startScreenShare() {
             try {
                 updateStatus('Starting screen share...', 'connecting');
+                debugLogMessage('🔄 Starting screen share...', 'info');
                 
+                // Stop existing stream
                 if (localStream) {
                     localStream.getTracks().forEach(track => track.stop());
                 }
                 
+                // Get screen share stream
+                debugLogMessage('Requesting screen capture permission...', 'info');
                 localStream = await navigator.mediaDevices.getDisplayMedia({
                     video: {
                         cursor: "always",
                         width: { ideal: 1920 },
-                        height: { ideal: 1080 }
+                        height: { ideal: 1080 },
+                        frameRate: { ideal: 30, max: 60 }
                     },
                     audio: false
                 });
+                
+                debugLogMessage(`✅ Screen captured! Tracks: ${localStream.getTracks().length}`, 'success');
+                
+                // Monitor track states
+                monitorTrackStates();
                 
                 // Display local screen
                 const video = document.getElementById('localScreen');
@@ -586,33 +721,47 @@
                 noVideo.style.display = 'none';
                 video.style.display = 'block';
                 
-                // Notify server
-                ws.send(JSON.stringify({
-                    type: 'screen-sharing-started',
-                    timestamp: Date.now()
-                }));
+                // Notify server that sharing started
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'screen-sharing-started',
+                        timestamp: Date.now()
+                    }));
+                }
                 
                 updateStatus('Screen sharing active', 'connected');
-                log('Screen sharing started');
+                debugLogMessage('✅ Screen sharing started', 'success');
                 document.getElementById('shareBtn').disabled = true;
                 document.getElementById('stopBtn').disabled = false;
                 
-                // Notify existing viewers
-                Object.keys(peerConnections).forEach(viewerId => {
-                    updatePeerTracks(viewerId);
-                });
-                
                 showNotification('Screen sharing started', 'success');
                 
-                // Handle stop via browser UI
-                localStream.getVideoTracks()[0].onended = () => {
-                    stopScreenShare();
-                };
+                // Start stats monitoring
+                startStatsMonitoring();
                 
             } catch (error) {
                 updateStatus('Ready to share', 'connected');
-                log('Screen share cancelled: ' + error.message);
+                debugLogMessage('❌ Screen share error: ' + error.message, 'error');
+                console.error('Screen share error:', error);
                 showNotification('Screen share cancelled', 'warning');
+            }
+        }
+
+        // Monitor track states
+        function monitorTrackStates() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => {
+                    track.onmute = () => {
+                        debugLogMessage(`Track ${track.kind} muted`, 'warning');
+                    };
+                    track.onunmute = () => {
+                        debugLogMessage(`Track ${track.kind} unmuted`, 'info');
+                    };
+                    track.onended = () => {
+                        debugLogMessage(`Track ${track.kind} ended`, 'error');
+                        stopScreenShare();
+                    };
+                });
             }
         }
 
@@ -630,23 +779,27 @@
                 noVideo.style.display = 'flex';
                 
                 // Notify server
-                ws.send(JSON.stringify({
-                    type: 'screen-sharing-stopped',
-                    timestamp: Date.now()
-                }));
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'screen-sharing-stopped',
+                        timestamp: Date.now()
+                    }));
+                }
                 
                 updateStatus('Screen sharing stopped', 'connected');
-                log('Screen sharing stopped');
+                debugLogMessage('🛑 Screen sharing stopped', 'info');
                 document.getElementById('shareBtn').disabled = false;
                 document.getElementById('stopBtn').disabled = true;
                 
                 // Close all peer connections
-                Object.keys(peerConnections).forEach(viewerId => {
-                    if (peerConnections[viewerId]) {
-                        peerConnections[viewerId].close();
-                    }
+                peerConnections.forEach((pc, viewerId) => {
+                    pc.close();
+                    debugLogMessage(`Closed connection to viewer ${viewerId}`, 'info');
                 });
-                peerConnections = {};
+                peerConnections.clear();
+                
+                // Stop stats monitoring
+                stopStatsMonitoring();
                 
                 showNotification('Screen sharing stopped', 'info');
             }
@@ -654,26 +807,55 @@
 
         // Create peer connection with viewer
         async function createPeerConnection(viewerId, viewerName) {
-            if (peerConnections[viewerId]) {
-                log(`Already connected to ${viewerName}`);
+            // Check if connection already exists
+            if (peerConnections.has(viewerId)) {
+                debugLogMessage(`Already connected to ${viewerName}`, 'info');
                 return;
             }
             
-            log(`Creating connection to ${viewerName}`);
+            debugLogMessage(`Creating WebRTC connection to ${viewerName}`, 'webrtc');
             
             try {
+                // Create RTCPeerConnection with robust configuration
                 const pc = new RTCPeerConnection({
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun1.l.google.com:19302' }
-                    ]
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' },
+                        { urls: 'stun:stun3.l.google.com:19302' },
+                        { urls: 'stun:stun4.l.google.com:19302' },
+                        // TURN servers for NAT traversal
+                        {
+                            urls: 'turn:openrelay.metered.ca:80',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        },
+                        {
+                            urls: 'turn:openrelay.metered.ca:443',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        },
+                        {
+                            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        }
+                    ],
+                    iceCandidatePoolSize: 10,
+                    iceTransportPolicy: 'all',
+                    bundlePolicy: 'max-bundle',
+                    rtcpMuxPolicy: 'require'
                 });
                 
-                peerConnections[viewerId] = pc;
+                // Store the connection
+                peerConnections.set(viewerId, pc);
                 
-                // Add local screen stream if available
+                // Add screen track if available
                 if (localStream) {
-                    updatePeerTracks(viewerId);
+                    localStream.getTracks().forEach(track => {
+                        debugLogMessage(`Adding ${track.kind} track to ${viewerName}`, 'webrtc');
+                        pc.addTrack(track, localStream);
+                    });
                 }
                 
                 // Handle ICE candidates
@@ -685,136 +867,148 @@
                             candidate: event.candidate,
                             timestamp: Date.now()
                         }));
+                        debugLogMessage(`Sent ICE candidate to ${viewerName}`, 'webrtc');
+                    } else if (event.candidate === null) {
+                        debugLogMessage(`ICE gathering complete for ${viewerName}`, 'success');
                     }
                 };
                 
-                // Create and send offer
+                // Handle ICE gathering state
+                pc.onicegatheringstatechange = () => {
+                    debugLogMessage(`ICE gathering state for ${viewerName}: ${pc.iceGatheringState}`, 'webrtc');
+                    updateStat('statIceState', pc.iceGatheringState);
+                };
+                
+                // Handle ICE connection state
+                pc.oniceconnectionstatechange = () => {
+                    debugLogMessage(`ICE connection state for ${viewerName}: ${pc.iceConnectionState}`, 'webrtc');
+                    
+                    if (pc.iceConnectionState === 'failed') {
+                        debugLogMessage(`ICE connection failed for ${viewerName}`, 'error');
+                        setTimeout(() => {
+                            if (pc.iceConnectionState === 'failed') {
+                                debugLogMessage(`Restarting ICE for ${viewerName}`, 'info');
+                                pc.restartIce();
+                            }
+                        }, 1000);
+                    } else if (pc.iceConnectionState === 'connected') {
+                        debugLogMessage(`✅ ICE connected to ${viewerName}`, 'success');
+                    } else if (pc.iceConnectionState === 'completed') {
+                        debugLogMessage(`✅ ICE completed with ${viewerName}`, 'success');
+                    }
+                };
+                
+                // Handle connection state changes
+                pc.onconnectionstatechange = () => {
+                    debugLogMessage(`Connection state with ${viewerName}: ${pc.connectionState}`, 'webrtc');
+                    
+                    if (pc.connectionState === 'connected') {
+                        debugLogMessage(`✅ WebRTC connected to ${viewerName}`, 'success');
+                    } else if (pc.connectionState === 'failed') {
+                        debugLogMessage(`❌ WebRTC connection failed with ${viewerName}`, 'error');
+                        setTimeout(() => {
+                            if (pc.connectionState === 'failed') {
+                                debugLogMessage(`Attempting to reconnect to ${viewerName}...`, 'info');
+                                peerConnections.delete(viewerId);
+                                createPeerConnection(viewerId, viewerName);
+                            }
+                        }, 3000);
+                    }
+                };
+                
+                // Create offer
+                debugLogMessage(`Creating offer for ${viewerName}...`, 'webrtc');
                 const offer = await pc.createOffer({
                     offerToReceiveAudio: false,
-                    offerToReceiveVideo: false
+                    offerToReceiveVideo: false,
+                    iceRestart: false
                 });
                 
+                // Set codec preferences
+                if (offer.sdp) {
+                    offer.sdp = preferCodec(offer.sdp, 'VP8');
+                }
+                
+                debugLogMessage(`Setting local description for ${viewerName}...`, 'webrtc');
                 await pc.setLocalDescription(offer);
                 
+                // Wait for ICE candidates to gather
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+                // Send offer to viewer
                 ws.send(JSON.stringify({
                     type: 'offer',
                     target: viewerId,
-                    sdp: offer,
+                    sdp: pc.localDescription,
                     timestamp: Date.now()
                 }));
                 
-                log(`Sent offer to ${viewerName}`);
+                debugLogMessage(`📤 Sent WebRTC offer to ${viewerName}`, 'success');
+                
+                // Add viewer to UI
+                addViewer(viewerId, viewerName);
                 
             } catch (error) {
-                log(`Error creating connection: ${error.message}`);
-                delete peerConnections[viewerId];
+                debugLogMessage(`❌ Error creating WebRTC connection to ${viewerName}: ${error.message}`, 'error');
+                console.error('WebRTC error:', error);
+                peerConnections.delete(viewerId);
             }
         }
 
-        // Handle WebRTC offers, answers, and ICE candidates
-        async function handleOffer(senderId, sdp) {
-            try {
-                let pc = peerConnections[senderId];
-                if (!pc) {
-                    pc = new RTCPeerConnection({
-                        iceServers: [
-                            { urls: 'stun:stun.l.google.com:19302' }
-                        ]
-                    });
-                    peerConnections[senderId] = pc;
-                    
-                    if (localStream) {
-                        updatePeerTracks(senderId);
-                    }
-                    
-                    pc.onicecandidate = (event) => {
-                        if (event.candidate && ws.readyState === WebSocket.OPEN) {
-                            ws.send(JSON.stringify({
-                                type: 'ice-candidate',
-                                target: senderId,
-                                candidate: event.candidate,
-                                timestamp: Date.now()
-                            }));
-                        }
-                    };
+        // Helper function to prefer specific codec
+        function preferCodec(sdp, codec) {
+            const lines = sdp.split('\n');
+            const videoLine = lines.findIndex(line => line.startsWith('m=video'));
+            
+            if (videoLine === -1) return sdp;
+            
+            let codecLines = [];
+            for (let i = videoLine + 1; i < lines.length; i++) {
+                if (lines[i].startsWith('m=')) break;
+                if (lines[i].startsWith('a=rtpmap:')) {
+                    codecLines.push(i);
                 }
-                
-                await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                
-                ws.send(JSON.stringify({
-                    type: 'answer',
-                    target: senderId,
-                    sdp: answer,
-                    timestamp: Date.now()
-                }));
-                
-            } catch (error) {
-                log(`Error handling offer: ${error.message}`);
             }
+            
+            for (let i = 0; i < codecLines.length; i++) {
+                if (lines[codecLines[i]].includes(codec)) {
+                    const preferredLine = lines[codecLines[i]];
+                    lines.splice(codecLines[i], 1);
+                    lines.splice(codecLines[0], 0, preferredLine);
+                    break;
+                }
+            }
+            
+            return lines.join('\n');
         }
 
+        // Handle WebRTC answers
         async function handleAnswer(senderId, sdp) {
-            const pc = peerConnections[senderId];
+            const pc = peerConnections.get(senderId);
             if (pc) {
                 try {
                     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+                    debugLogMessage(`✅ Set remote description from ${senderId}`, 'success');
                 } catch (error) {
-                    log(`Error setting answer: ${error.message}`);
+                    debugLogMessage(`Error setting answer from ${senderId}: ${error.message}`, 'error');
                 }
             }
         }
 
+        // Handle ICE candidates
         async function handleIceCandidate(senderId, candidate) {
-            const pc = peerConnections[senderId];
+            const pc = peerConnections.get(senderId);
             if (pc) {
                 try {
                     await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                    debugLogMessage(`✅ Added ICE candidate from ${senderId}`, 'success');
                 } catch (error) {
-                    log(`Error adding ICE candidate: ${error.message}`);
+                    debugLogMessage(`Error adding ICE candidate from ${senderId}: ${error.message}`, 'error');
                 }
             }
         }
 
-        function updatePeerTracks(viewerId) {
-            const pc = peerConnections[viewerId];
-            if (!pc || !localStream) return;
-            
-            const senders = pc.getSenders();
-            senders.forEach(sender => {
-                if (sender.track) {
-                    pc.removeTrack(sender);
-                }
-            });
-            
-            const videoTrack = localStream.getVideoTracks()[0];
-            if (videoTrack) {
-                pc.addTrack(videoTrack, localStream);
-            }
-        }
-
-        // Update viewer list
-        function updateViewerList(viewers) {
-            const grid = document.getElementById('viewersGrid');
-            grid.innerHTML = '';
-            document.getElementById('viewerCount').textContent = viewers.length;
-            
-            if (viewers.length === 0) {
-                grid.innerHTML = `
-                    <div class="no-viewers" style="grid-column: 1 / -1; text-align: center; padding: 40px; color: #64748b;">
-                        <i class="fas fa-user-friends" style="font-size: 3rem; opacity: 0.3; margin-bottom: 15px;"></i>
-                        <p>Waiting for viewers to join...</p>
-                    </div>
-                `;
-                return;
-            }
-            
-            viewers.forEach(viewer => {
-                addViewer(viewer.id, viewer.name);
-            });
-        }
-
+        // Add viewer to UI
         function addViewer(viewerId, viewerName) {
             const grid = document.getElementById('viewersGrid');
             const noViewers = grid.querySelector('.no-viewers');
@@ -831,47 +1025,143 @@
                 <div class="viewer-avatar">${firstLetter}</div>
                 <div class="viewer-info">
                     <h4>${viewerName}</h4>
-                    <p>Viewer</p>
+                    <p>Connected</p>
+                </div>
+                <div class="viewer-status">
+                    <div class="status-dot connected"></div>
                 </div>
             `;
             
             grid.appendChild(viewerCard);
-            document.getElementById('viewerCount').textContent = grid.children.length;
+            updateViewerCount();
         }
 
+        // Remove viewer
         function removeViewer(viewerId) {
             const element = document.getElementById(`viewer-${viewerId}`);
             if (element) {
                 element.remove();
-                
-                const grid = document.getElementById('viewersGrid');
-                document.getElementById('viewerCount').textContent = grid.children.length;
-                
-                if (grid.children.length === 0) {
-                    updateViewerList([]);
-                }
+                updateViewerCount();
             }
             
-            if (peerConnections[viewerId]) {
-                peerConnections[viewerId].close();
-                delete peerConnections[viewerId];
+            // Close peer connection
+            const pc = peerConnections.get(viewerId);
+            if (pc) {
+                pc.close();
+                peerConnections.delete(viewerId);
+            }
+        }
+
+        // Update viewer count
+        function updateViewerCount() {
+            const grid = document.getElementById('viewersGrid');
+            const count = grid.children.length;
+            document.getElementById('viewerCount').textContent = count;
+            updateStat('statConnections', count);
+            
+            if (count === 0 && !grid.querySelector('.no-viewers')) {
+                grid.innerHTML = `
+                    <div class="no-viewers" style="grid-column: 1 / -1; text-align: center; padding: 40px; color: #64748b;">
+                        <i class="fas fa-user-friends" style="font-size: 3rem; opacity: 0.3; margin-bottom: 15px;"></i>
+                        <p>Waiting for viewers to join...</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Force reconnect all viewers
+        function forceReconnect() {
+            debugLogMessage('🔄 Force reconnecting all viewers...', 'info');
+            
+            peerConnections.forEach((pc, viewerId) => {
+                pc.close();
+            });
+            peerConnections.clear();
+            
+            // Update viewer list
+            const grid = document.getElementById('viewersGrid');
+            const viewerCards = grid.querySelectorAll('.viewer-card');
+            viewerCards.forEach(card => {
+                const viewerId = card.id.replace('viewer-', '');
+                const viewerName = card.querySelector('h4').textContent;
+                setTimeout(() => {
+                    createPeerConnection(viewerId, viewerName);
+                }, 1000);
+            });
+        }
+
+        // Start stats monitoring
+        function startStatsMonitoring() {
+            if (statsInterval) clearInterval(statsInterval);
+            
+            statsInterval = setInterval(async () => {
+                if (!localStream) return;
+                
+                try {
+                    let totalBitrate = 0;
+                    let totalFrames = 0;
+                    
+                    // Get stats from all peer connections
+                    for (const [viewerId, pc] of peerConnections) {
+                        const stats = await pc.getStats();
+                        stats.forEach(report => {
+                            if (report.type === 'outbound-rtp' && report.kind === 'video') {
+                                totalBitrate += (report.bytesSent || 0) * 8 / 1000; // kbps
+                                totalFrames += report.framesEncoded || 0;
+                            }
+                        });
+                    }
+                    
+                    // Update stats display
+                    updateStat('statBitrate', `${Math.round(totalBitrate)} kbps`);
+                    
+                    // Calculate FPS (rough estimate)
+                    const now = Date.now();
+                    if (window.lastFrameTime && window.lastFrameCount) {
+                        const timeDiff = (now - window.lastFrameTime) / 1000;
+                        const frameDiff = totalFrames - window.lastFrameCount;
+                        const fps = timeDiff > 0 ? Math.round(frameDiff / timeDiff) : 0;
+                        updateStat('statFps', `${fps} FPS`);
+                    }
+                    
+                    window.lastFrameTime = now;
+                    window.lastFrameCount = totalFrames;
+                    
+                } catch (error) {
+                    // Stats not available
+                }
+            }, 1000);
+        }
+
+        // Stop stats monitoring
+        function stopStatsMonitoring() {
+            if (statsInterval) {
+                clearInterval(statsInterval);
+                statsInterval = null;
+            }
+        }
+
+        // Update stat display
+        function updateStat(statId, value) {
+            const element = document.getElementById(statId);
+            if (element) {
+                element.textContent = value;
             }
         }
 
         // Cleanup
         function cleanup() {
+            // Stop screen sharing
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
                 localStream = null;
             }
             
-            Object.keys(peerConnections).forEach(viewerId => {
-                if (peerConnections[viewerId]) {
-                    peerConnections[viewerId].close();
-                }
-            });
-            peerConnections = {};
+            // Close all peer connections
+            peerConnections.forEach(pc => pc.close());
+            peerConnections.clear();
             
+            // Reset UI
             const video = document.getElementById('localScreen');
             const noVideo = document.getElementById('noVideo');
             video.srcObject = null;
@@ -880,6 +1170,58 @@
             
             document.getElementById('shareBtn').disabled = true;
             document.getElementById('stopBtn').disabled = true;
+            document.getElementById('reconnectBtn').disabled = true;
+            
+            updateViewerCount();
+            stopStatsMonitoring();
+        }
+
+        // Debug functions
+        function toggleDebug() {
+            debugMode = !debugMode;
+            debugPanel.classList.toggle('visible');
+            debugLogMessage(`Debug mode ${debugMode ? 'enabled' : 'disabled'}`, 'info');
+        }
+
+        function debugLogMessage(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `debug-entry debug-${type}`;
+            entry.innerHTML = `
+                <span class="debug-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</span>
+                <span class="debug-message">${message}</span>
+            `;
+            debugLog.prepend(entry);
+            
+            // Keep only last 50 entries
+            const entries = debugLog.getElementsByClassName('debug-entry');
+            if (entries.length > 50) {
+                debugLog.removeChild(entries[entries.length - 1]);
+            }
+        }
+
+        function clearDebugLog() {
+            debugLog.innerHTML = '';
+            debugLogMessage('Debug log cleared', 'info');
+        }
+
+        function exportDebugLog() {
+            const entries = debugLog.getElementsByClassName('debug-entry');
+            let logText = 'SyncFlix Host Debug Log\n';
+            logText += '=====================\n\n';
+            
+            for (let i = entries.length - 1; i >= 0; i--) {
+                logText += entries[i].textContent + '\n';
+            }
+            
+            const blob = new Blob([logText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `syncflix-debug-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
 
         // Helper functions
@@ -892,7 +1234,7 @@
                     statusDot.classList.add('connected');
                     break;
                 case 'connecting':
-                    statusDot.style.background = '#f59e0b';
+                    statusDot.classList.add('connecting');
                     break;
                 case 'error':
                     statusDot.style.background = '#ef4444';
@@ -903,27 +1245,16 @@
         }
 
         function log(message) {
-            const logContainer = document.getElementById('logContainer');
-            const entry = document.createElement('div');
-            entry.className = 'log-entry';
-            entry.innerHTML = `
-                <span class="log-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</span>
-                <span class="log-message">${message}</span>
-            `;
-            logContainer.prepend(entry);
-            
-            if (logContainer.children.length > 20) {
-                logContainer.removeChild(logContainer.lastChild);
-            }
+            // Simple log for backward compatibility
+            console.log(message);
         }
 
         function showNotification(message, type) {
-            // Create notification element
             const notification = document.createElement('div');
             notification.style.cssText = `
                 position: fixed;
                 top: 20px;
-                right: 20px;
+                right: 80px;
                 padding: 15px 20px;
                 border-radius: 10px;
                 color: white;
@@ -968,7 +1299,6 @@
             
             document.body.appendChild(notification);
             
-            // Remove notification after 3 seconds
             setTimeout(() => {
                 notification.style.animation = 'slideOut 0.3s ease-in forwards';
                 setTimeout(() => {
