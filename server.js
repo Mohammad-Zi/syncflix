@@ -1,5 +1,3 @@
-[file name]: server.js
-[file content begin]
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -364,4 +362,3 @@ server.listen(PORT, () => {
   console.log(`📡 WebSocket available at ws://localhost:${PORT}/ws`);
   console.log(`🌐 HTTP API available at http://localhost:${PORT}`);
 });
-[file content end]
