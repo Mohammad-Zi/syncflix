@@ -16,18 +16,19 @@ const wss = new WebSocket.Server({
   clientTracking: true
 });
 
-// Store rooms data with WebRTC session info
+// Store rooms data
 const rooms = new Map();
 const userSessions = new Map();
 
 wss.on('connection', (ws, req) => {
   console.log('🔌 New WebSocket connection');
   
-  // Parse query parameters from URL
+  // Parse query parameters
   const url = new URL(req.url, `http://${req.headers.host}`);
   const roomId = url.searchParams.get('room');
   const username = url.searchParams.get('username') || 'Anonymous';
-  const isHost = url.searchParams.get('host') === 'true';
+  const role = url.searchParams.get('role') || 'viewer'; // 'host' or 'viewer'
+  const isHost = role === 'host';
   
   if (!roomId) {
     console.log('❌ No room ID provided');
@@ -35,393 +36,335 @@ wss.on('connection', (ws, req) => {
     return;
   }
   
-  // Add connection to room
+  // Initialize room if it doesn't exist
   if (!rooms.has(roomId)) {
-    rooms.set(roomId, new Set());
+    rooms.set(roomId, {
+      connections: new Set(),
+      host: null,
+      viewers: new Set()
+    });
   }
-  rooms.get(roomId).add(ws);
   
-  // Generate unique user ID
-  const userId = Math.random().toString(36).substring(7);
+  const room = rooms.get(roomId);
   
-  // Store user info on WebSocket object
-  ws.roomId = roomId;
+  // Check if host already exists
+  if (isHost && room.host) {
+    console.log('❌ Host already exists in room');
+    ws.send(JSON.stringify({
+      type: 'error',
+      message: 'Host already exists in this room',
+      code: 'HOST_EXISTS'
+    }));
+    ws.close(4002, 'Host already exists');
+    return;
+  }
+  
+  // Add connection to room
+  const userId = generateUserId();
   ws.userId = userId;
+  ws.roomId = roomId;
   ws.username = username;
+  ws.role = role;
   ws.isHost = isHost;
+  
+  room.connections.add(ws);
+  
+  if (isHost) {
+    room.host = ws;
+  } else {
+    room.viewers.add(ws);
+  }
   
   // Store user session
   userSessions.set(userId, {
     roomId,
     username,
+    role,
     isHost,
     connectedAt: Date.now(),
     ip: req.socket.remoteAddress
   });
   
-  console.log(`✅ ${userId} (${username}) joined room: ${roomId}${isHost ? ' [HOST]' : ''}`);
+  console.log(`✅ ${userId} (${username}) joined room: ${roomId} as ${role}`);
   
-  // Send welcome message with user info
+  // Send welcome message
   ws.send(JSON.stringify({
     type: 'welcome',
-    userId: userId,
-    username: username,
+    userId,
+    username,
     room: roomId,
-    isHost: isHost,
+    role,
+    isHost,
     timestamp: Date.now(),
-    message: 'Connected to SyncFlix WebRTC signaling server'
+    message: `Connected as ${role}`
   }));
   
-  // Get existing users in room (excluding self)
-  const existingUsers = getUsersInRoom(roomId).filter(user => user.id !== userId);
-  
-  // Send existing users to new connection
-  if (existingUsers.length > 0) {
+  // If viewer joins, send host info
+  if (!isHost && room.host) {
     ws.send(JSON.stringify({
-      type: 'existing-users',
-      users: existingUsers
+      type: 'host-info',
+      hostId: room.host.userId,
+      hostName: room.host.username,
+      timestamp: Date.now()
     }));
+    
+    // Notify host about new viewer
+    if (room.host.readyState === WebSocket.OPEN) {
+      room.host.send(JSON.stringify({
+        type: 'viewer-joined',
+        viewerId: userId,
+        viewerName: username,
+        timestamp: Date.now()
+      }));
+    }
   }
   
-  // Notify others in room about new user
-  broadcastToRoom(roomId, ws, {
-    type: 'user-joined',
-    userId: userId,
-    username: username,
-    isHost: isHost,
-    timestamp: Date.now()
-  });
+  // If host joins, notify all viewers
+  if (isHost && room.viewers.size > 0) {
+    const viewers = Array.from(room.viewers).map(v => ({
+      id: v.userId,
+      name: v.username
+    }));
+    
+    ws.send(JSON.stringify({
+      type: 'viewers-list',
+      viewers,
+      timestamp: Date.now()
+    }));
+    
+    // Notify all viewers about host
+    room.viewers.forEach(viewer => {
+      if (viewer.readyState === WebSocket.OPEN) {
+        viewer.send(JSON.stringify({
+          type: 'host-joined',
+          hostId: userId,
+          hostName: username,
+          timestamp: Date.now()
+        }));
+      }
+    });
+  }
   
-  // Handle messages from client
+  // Handle messages
   ws.on('message', (message) => {
     try {
-      let data;
-      let isJson = false;
+      const data = JSON.parse(message);
+      console.log(`📨 ${data.type} from ${userId} (${role})`);
       
-      // Try to parse as JSON
-      try {
-        data = JSON.parse(message);
-        isJson = true;
-      } catch (parseError) {
-        // Handle as plain string command
-        data = { type: message };
-      }
-      
-      const messageType = data.type || 'unknown';
-      console.log(`📨 ${messageType} from ${userId} ${isJson ? '(JSON)' : '(plain)'}`);
-      
-      // Route messages by type
-      switch (messageType.toLowerCase()) {
-        case 'join':
-        case 'hello':
-          // Send existing users to new user
-          const existingUsers = getUsersInRoom(roomId).filter(user => user.id !== userId);
-          if (existingUsers.length > 0) {
-            ws.send(JSON.stringify({
-              type: 'existing-users',
-              users: existingUsers
-            }));
-          }
-          break;
-          
-        // Video control messages
-        case 'play':
-        case 'pause':
-        case 'seek':
-        case 'video-change':
-        case 'message':
-        case 'chat':
-          if (isJson) {
-            // Forward to all other users in room
-            broadcastToRoom(roomId, ws, {
-              ...data,
-              senderId: userId,
-              sender: username,
-              timestamp: Date.now()
-            });
-          }
-          break;
-          
-        // WebRTC signaling messages
+      switch(data.type) {
         case 'offer':
-          if (isJson && data.target && data.sdp) {
-            console.log(`📤 Forwarding offer from ${userId} to ${data.target}`);
-            sendToUser(data.target, {
-              type: 'offer',
-              sender: userId,
-              senderName: username,
-              sdp: data.sdp,
-              timestamp: Date.now()
-            });
-          }
+          handleOffer(data, ws, room);
           break;
           
         case 'answer':
-          if (isJson && data.target && data.sdp) {
-            console.log(`📤 Forwarding answer from ${userId} to ${data.target}`);
-            sendToUser(data.target, {
-              type: 'answer',
-              sender: userId,
-              senderName: username,
-              sdp: data.sdp,
-              timestamp: Date.now()
-            });
-          }
+          handleAnswer(data, ws, room);
           break;
           
         case 'ice-candidate':
-        case 'icecandidate':
-          if (isJson && data.target && data.candidate) {
-            console.log(`📤 Forwarding ICE candidate from ${userId} to ${data.target}`);
-            sendToUser(data.target, {
-              type: 'ice-candidate',
-              sender: userId,
-              candidate: data.candidate,
-              timestamp: Date.now()
-            });
-          }
+          handleIceCandidate(data, ws, room);
           break;
           
-        case 'sync-request':
-        case 'sync':
-          ws.send(JSON.stringify({
-            type: 'sync-response',
-            room: roomId,
-            users: getUsersInRoom(roomId),
-            host: getHostInRoom(roomId),
+        case 'screen-sharing-started':
+          // Host started sharing, notify all viewers
+          broadcastToViewers(room, ws, {
+            type: 'screen-sharing-started',
+            hostId: userId,
+            hostName: username,
             timestamp: Date.now()
-          }));
+          });
           break;
           
-        case 'host-change':
-          if (isJson && ws.isHost && data.newHostId) {
-            const success = updateHost(roomId, data.newHostId);
-            if (success) {
-              broadcastToRoom(roomId, null, {
-                type: 'host-changed',
-                newHostId: data.newHostId,
-                previousHostId: userId,
-                timestamp: Date.now()
-              });
-            }
-          }
+        case 'screen-sharing-stopped':
+          // Host stopped sharing, notify all viewers
+          broadcastToViewers(room, ws, {
+            type: 'screen-sharing-stopped',
+            hostId: userId,
+            timestamp: Date.now()
+          });
           break;
           
         case 'ping':
-        case 'heartbeat':
-          ws.send(JSON.stringify({ 
-            type: 'pong', 
-            timestamp: Date.now(),
-            serverTime: Date.now()
-          }));
-          break;
-          
-        case 'get-users':
-        case 'users':
-        case 'list-users':
           ws.send(JSON.stringify({
-            type: 'users-list',
-            users: getUsersInRoom(roomId),
+            type: 'pong',
             timestamp: Date.now()
           }));
           break;
           
         case 'get-room-info':
-        case 'room-info':
-          ws.send(JSON.stringify({
-            type: 'room-info',
-            room: roomId,
-            userCount: rooms.get(roomId)?.size || 0,
-            host: getHostInRoom(roomId),
-            users: getUsersInRoom(roomId),
-            timestamp: Date.now()
-          }));
+          sendRoomInfo(ws, room);
           break;
           
-        default:
-          console.log(`⚠️ Unknown message type: ${messageType}`);
-          // Echo back for debugging
-          ws.send(JSON.stringify({
-            type: 'error',
-            message: `Unknown message type: ${messageType}`,
-            received: data,
-            timestamp: Date.now()
-          }));
+        case 'request-screen':
+          // Viewer requests screen from host
+          if (!isHost && room.host) {
+            room.host.send(JSON.stringify({
+              type: 'screen-request',
+              viewerId: userId,
+              viewerName: username,
+              timestamp: Date.now()
+            }));
+          }
+          break;
       }
     } catch (error) {
-      console.error('❌ Error handling message:', error);
-      console.error('Raw message was:', message.toString());
+      console.error('Error handling message:', error);
     }
   });
   
-  // Handle connection close
+  // Handle disconnect
   ws.on('close', () => {
-    console.log(`👋 ${userId} disconnected`);
-    
-    // Remove from user sessions
-    userSessions.delete(userId);
+    console.log(`👋 ${userId} (${role}) disconnected`);
     
     if (rooms.has(roomId)) {
-      rooms.get(roomId).delete(ws);
+      const room = rooms.get(roomId);
+      room.connections.delete(ws);
       
-      // Notify others
-      broadcastToRoom(roomId, null, {
-        type: 'user-left',
-        userId: userId,
-        username: username,
-        timestamp: Date.now()
-      });
-      
-      // If host left, assign new host
-      if (ws.isHost) {
-        const remainingUsers = Array.from(rooms.get(roomId));
-        if (remainingUsers.length > 0) {
-          const newHost = remainingUsers[0];
-          newHost.isHost = true;
-          userSessions.get(newHost.userId).isHost = true;
-          
-          broadcastToRoom(roomId, null, {
-            type: 'host-changed',
-            newHostId: newHost.userId,
-            previousHostId: userId,
+      if (isHost) {
+        room.host = null;
+        // Notify all viewers that host left
+        broadcastToViewers(room, null, {
+          type: 'host-left',
+          timestamp: Date.now()
+        });
+      } else {
+        room.viewers.delete(ws);
+        // Notify host that viewer left
+        if (room.host && room.host.readyState === WebSocket.OPEN) {
+          room.host.send(JSON.stringify({
+            type: 'viewer-left',
+            viewerId: userId,
             timestamp: Date.now()
-          });
-          
-          console.log(`👑 New host assigned: ${newHost.userId}`);
+          }));
         }
       }
       
-      // Clean up empty rooms
-      if (rooms.get(roomId).size === 0) {
+      // Clean up empty room
+      if (room.connections.size === 0) {
         rooms.delete(roomId);
-        console.log(`🗑️ Room ${roomId} deleted (empty)`);
+        console.log(`🗑️ Room ${roomId} deleted`);
       }
     }
+    
+    userSessions.delete(userId);
   });
   
-  // Handle errors
   ws.on('error', (error) => {
-    console.error(`❌ WebSocket error for ${userId}:`, error);
+    console.error(`WebSocket error for ${userId}:`, error);
   });
 });
 
-// Helper function to broadcast to room (excluding sender)
-function broadcastToRoom(roomId, senderWs, message) {
-  if (!rooms.has(roomId)) return;
-  
-  const messageStr = JSON.stringify(message);
-  let sentCount = 0;
-  
-  rooms.get(roomId).forEach(client => {
-    if (client !== senderWs && client.readyState === WebSocket.OPEN) {
-      client.send(messageStr);
-      sentCount++;
-    }
-  });
-  
-  console.log(`📤 Broadcasted ${message.type} to ${sentCount} user(s) in room ${roomId}`);
+// Helper functions
+function generateUserId() {
+  return Math.random().toString(36).substring(2, 9);
 }
 
-// Helper function to send message to specific user
-function sendToUser(targetUserId, message) {
-  // Find the user's WebSocket connection
-  let targetWs = null;
-  let foundRoom = null;
+function handleOffer(data, sender, room) {
+  const { target, sdp } = data;
   
-  rooms.forEach((clients, roomId) => {
-    clients.forEach(client => {
-      if (client.userId === targetUserId && client.readyState === WebSocket.OPEN) {
-        targetWs = client;
-        foundRoom = roomId;
-      }
-    });
+  // Find target connection
+  let targetWs = null;
+  room.connections.forEach(client => {
+    if (client.userId === target && client.readyState === WebSocket.OPEN) {
+      targetWs = client;
+    }
   });
   
   if (targetWs) {
-    targetWs.send(JSON.stringify(message));
-    console.log(`✅ Message sent to ${targetUserId} in room ${foundRoom}`);
-    return true;
+    targetWs.send(JSON.stringify({
+      type: 'offer',
+      sender: sender.userId,
+      senderName: sender.username,
+      sdp,
+      timestamp: Date.now()
+    }));
+    console.log(`📤 Forwarded offer from ${sender.userId} to ${target}`);
   }
-  
-  console.log(`❌ Target user ${targetUserId} not found or not connected`);
-  return false;
 }
 
-// Helper function to get users in room
-function getUsersInRoom(roomId) {
-  if (!rooms.has(roomId)) return [];
+function handleAnswer(data, sender, room) {
+  const { target, sdp } = data;
   
-  const users = [];
-  rooms.get(roomId).forEach(client => {
-    users.push({
-      id: client.userId,
-      username: client.username,
-      isHost: client.isHost
-    });
-  });
-  return users;
-}
-
-// Helper function to get host in room
-function getHostInRoom(roomId) {
-  if (!rooms.has(roomId)) return null;
-  
-  for (const client of rooms.get(roomId)) {
-    if (client.isHost) {
-      return {
-        id: client.userId,
-        username: client.username
-      };
-    }
-  }
-  return null;
-}
-
-// Helper function to update host
-function updateHost(roomId, newHostId) {
-  if (!rooms.has(roomId)) return false;
-  
-  let success = false;
-  let oldHostId = null;
-  
-  rooms.get(roomId).forEach(client => {
-    if (client.userId === newHostId) {
-      client.isHost = true;
-      if (userSessions.has(newHostId)) {
-        userSessions.get(newHostId).isHost = true;
-      }
-      success = true;
-    } else if (client.isHost) {
-      client.isHost = false;
-      oldHostId = client.userId;
-      if (userSessions.has(client.userId)) {
-        userSessions.get(client.userId).isHost = false;
-      }
+  let targetWs = null;
+  room.connections.forEach(client => {
+    if (client.userId === target && client.readyState === WebSocket.OPEN) {
+      targetWs = client;
     }
   });
   
-  console.log(`👑 Host changed in room ${roomId}: ${oldHostId} -> ${newHostId}`);
-  return success;
+  if (targetWs) {
+    targetWs.send(JSON.stringify({
+      type: 'answer',
+      sender: sender.userId,
+      sdp,
+      timestamp: Date.now()
+    }));
+  }
+}
+
+function handleIceCandidate(data, sender, room) {
+  const { target, candidate } = data;
+  
+  let targetWs = null;
+  room.connections.forEach(client => {
+    if (client.userId === target && client.readyState === WebSocket.OPEN) {
+      targetWs = client;
+    }
+  });
+  
+  if (targetWs) {
+    targetWs.send(JSON.stringify({
+      type: 'ice-candidate',
+      sender: sender.userId,
+      candidate,
+      timestamp: Date.now()
+    }));
+  }
+}
+
+function broadcastToViewers(room, sender, message) {
+  const messageStr = JSON.stringify(message);
+  room.viewers.forEach(viewer => {
+    if (viewer !== sender && viewer.readyState === WebSocket.OPEN) {
+      viewer.send(messageStr);
+    }
+  });
+}
+
+function sendRoomInfo(ws, room) {
+  const viewers = Array.from(room.viewers).map(v => ({
+    id: v.userId,
+    name: v.username
+  }));
+  
+  ws.send(JSON.stringify({
+    type: 'room-info',
+    host: room.host ? {
+      id: room.host.userId,
+      name: room.host.username
+    } : null,
+    viewers,
+    viewerCount: viewers.length,
+    timestamp: Date.now()
+  }));
 }
 
 // HTTP routes
 app.get('/', (req, res) => {
+  const roomsInfo = [];
+  rooms.forEach((room, roomId) => {
+    roomsInfo.push({
+      roomId,
+      host: room.host ? room.host.username : null,
+      viewerCount: room.viewers.size,
+      connections: room.connections.size
+    });
+  });
+  
   res.json({
-    service: 'SyncFlix WebRTC Signaling Server',
+    service: 'SyncFlix Screen Sharing Server',
     status: 'online',
-    version: '1.0.0',
-    documentation: {
-      websocket: 'Connect to /ws?room=ROOM_ID&username=NAME&host=true',
-      endpoints: [
-        'GET / - Server status',
-        'GET /rooms - List all rooms',
-        'GET /room/:id - Get room info',
-        'POST /room/create - Create new room'
-      ]
-    },
-    activeRooms: rooms.size,
-    totalConnections: Array.from(rooms.values())
-      .reduce((sum, clients) => sum + clients.size, 0),
+    rooms: roomsInfo,
+    totalRooms: rooms.size,
     timestamp: new Date().toISOString()
   });
 });
@@ -429,55 +372,29 @@ app.get('/', (req, res) => {
 app.get('/room/:roomId', (req, res) => {
   const roomId = req.params.roomId;
   if (rooms.has(roomId)) {
+    const room = rooms.get(roomId);
     res.json({
-      room: roomId,
-      userCount: rooms.get(roomId).size,
-      host: getHostInRoom(roomId),
-      users: getUsersInRoom(roomId),
-      timestamp: new Date().toISOString()
+      roomId,
+      host: room.host ? {
+        id: room.host.userId,
+        name: room.host.username
+      } : null,
+      viewers: Array.from(room.viewers).map(v => ({
+        id: v.userId,
+        name: v.username
+      })),
+      viewerCount: room.viewers.size
     });
   } else {
-    res.status(404).json({ 
-      error: 'Room not found',
-      message: `Room "${roomId}" does not exist or is empty`
-    });
+    res.status(404).json({ error: 'Room not found' });
   }
-});
-
-app.get('/rooms', (req, res) => {
-  const roomsInfo = [];
-  rooms.forEach((clients, roomId) => {
-    roomsInfo.push({
-      room: roomId,
-      userCount: clients.size,
-      host: getHostInRoom(roomId),
-      users: getUsersInRoom(roomId)
-    });
-  });
-  
-  res.json({
-    rooms: roomsInfo,
-    totalRooms: rooms.size,
-    timestamp: new Date().toISOString()
-  });
 });
 
 app.post('/room/create', (req, res) => {
   const { roomId, username } = req.body;
   
   if (!roomId) {
-    return res.status(400).json({ 
-      error: 'Room ID required',
-      message: 'Please provide a roomId in the request body'
-    });
-  }
-  
-  if (rooms.has(roomId)) {
-    return res.status(409).json({ 
-      error: 'Room already exists',
-      message: `Room "${roomId}" is already active`,
-      userCount: rooms.get(roomId).size
-    });
+    return res.status(400).json({ error: 'Room ID required' });
   }
   
   const protocol = req.headers['x-forwarded-proto'] || req.protocol;
@@ -485,20 +402,10 @@ app.post('/room/create', (req, res) => {
   
   res.json({
     success: true,
-    room: roomId,
-    message: 'Room created (will be active when first user joins)',
-    wsUrl: `${protocol === 'https' ? 'wss' : 'ws'}://${host}/ws?room=${roomId}&username=${username || 'Host'}&host=true`,
-    httpUrl: `${protocol}://${host}/room/${roomId}`,
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'healthy',
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString()
+    roomId,
+    hostUrl: `${protocol === 'https' ? 'wss' : 'ws'}://${host}/ws?room=${roomId}&username=${username || 'Host'}&role=host`,
+    viewerUrl: `${protocol === 'https' ? 'wss' : 'ws'}://${host}/ws?room=${roomId}&username=Viewer&role=viewer`,
+    message: 'Room created'
   });
 });
 
@@ -508,5 +415,4 @@ server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📡 WebSocket available at ws://localhost:${PORT}/ws`);
   console.log(`🌐 HTTP API available at http://localhost:${PORT}`);
-  console.log(`⚡ Ready for WebRTC connections!`);
 });
