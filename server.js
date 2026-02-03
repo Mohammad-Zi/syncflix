@@ -1,54 +1,62 @@
 const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
+const cors = require("cors");
 
 const app = express();
+app.use(cors());
+
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server, path: "/ws" });
+const wss = new WebSocket.Server({ server });
 
-let host = null;
-let viewer = null;
+const rooms = new Map();
 
-wss.on("connection", (ws, req) => {
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  const role = url.searchParams.get("role");
-  ws.role = role;
+wss.on("connection", (ws) => {
+  ws.on("message", (message) => {
+    const data = JSON.parse(message);
 
-  if (role === "host") {
-    if (host) return ws.close();
-    host = ws;
-  }
+    const room = rooms.get(data.room);
+    if (!room && data.type !== "join") return;
 
-  if (role === "viewer") {
-    if (viewer) return ws.close();
-    viewer = ws;
-  }
+    switch (data.type) {
+      case "join": {
+        if (!rooms.has(data.room)) {
+          rooms.set(data.room, { host: ws, viewer: null });
+        } else {
+          rooms.get(data.room).viewer = ws;
+        }
+        ws.room = data.room;
+        break;
+      }
 
-  ws.on("message", msg => {
-    const data = JSON.parse(msg);
+      case "offer":
+      case "answer":
+      case "ice-candidate":
+      case "screen-request":
+        if (ws === room.host && room.viewer) {
+          room.viewer.send(JSON.stringify(data));
+        } else if (ws === room.viewer && room.host) {
+          room.host.send(JSON.stringify(data));
+        }
+        break;
 
-    // signaling
-    if (data.type === "offer" && viewer) viewer.send(msg);
-    if (data.type === "answer" && host) host.send(msg);
-    if (data.type === "ice") {
-      if (ws === host && viewer) viewer.send(msg);
-      if (ws === viewer && host) host.send(msg);
-    }
-
-    // chat
-    if (data.type === "chat") {
-      if (ws === host && viewer) viewer.send(msg);
-      if (ws === viewer && host) host.send(msg);
+      case "chat":
+        if (room.host && ws !== room.host) room.host.send(JSON.stringify(data));
+        if (room.viewer && ws !== room.viewer) room.viewer.send(JSON.stringify(data));
+        break;
     }
   });
 
   ws.on("close", () => {
-    if (ws === host) host = null;
-    if (ws === viewer) viewer = null;
+    if (!ws.room) return;
+    const room = rooms.get(ws.room);
+    if (!room) return;
+
+    if (room.host === ws) room.host = null;
+    if (room.viewer === ws) room.viewer = null;
   });
 });
 
-app.use(express.static(__dirname));
 server.listen(3000, () =>
-  console.log("🚀 http://localhost:3000")
+  console.log("🚀 Server running on http://localhost:3000")
 );

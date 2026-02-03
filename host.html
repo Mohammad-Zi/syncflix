@@ -4,72 +4,79 @@
 <meta charset="utf-8" />
 <title>Host</title>
 <style>
-body { margin:0; font-family:sans-serif; background:#0f172a; color:white; display:flex; height:100vh }
-video { flex:1; background:black }
-aside { width:320px; background:#020617; display:flex; flex-direction:column }
-header { padding:16px; font-weight:bold; background:#020617 }
-.chat { flex:1; overflow:auto; padding:12px }
-.chat div { margin-bottom:8px }
-input { border:none; padding:10px; width:100%; outline:none }
-button { padding:10px; background:#2563eb; color:white; border:none; cursor:pointer }
+#chat { height:150px; overflow:auto; border:1px solid #444; margin-top:10px }
 </style>
 </head>
 
 <body>
-<video id="local" autoplay muted></video>
+<h2>Host</h2>
+<button onclick="start()">Start Screen</button>
+<video id="localVideo" autoplay muted></video>
 
-<aside>
-  <header>Host</header>
-  <button onclick="start()">Start Screen Share</button>
-  <div class="chat" id="chat"></div>
-  <input id="msg" placeholder="Type message…" onkeydown="send(event)">
-</aside>
+<div id="chat"></div>
+<input id="chatInput" placeholder="Type message…" onkeydown="sendChat(event)">
 
 <script>
-const ws = new WebSocket(
-  location.protocol === "https:"
-    ? `wss://${location.host}/ws?role=host`
-    : `ws://${location.host}/ws?role=host`
-);
+const SERVER =
+  location.protocol === 'https:'
+    ? `wss://${location.host}`
+    : `ws://${location.host}`;
 
-let pc, stream, pending = [];
+const ws = new WebSocket(SERVER);
+const room = "private";
+
+let pc;
+let stream;
+let pendingIce = [];
+
+ws.onopen = () => ws.send(JSON.stringify({ type: "join", room }));
 
 ws.onmessage = async e => {
-  const m = JSON.parse(e.data);
-  if (m.type === "answer") {
-    await pc.setRemoteDescription({ type:"answer", sdp:m.sdp });
-    for (const c of pending) await pc.addIceCandidate(c);
-    pending = [];
+  const msg = JSON.parse(e.data);
+
+  if (msg.type === "answer") {
+    await pc.setRemoteDescription({ type: "answer", sdp: msg.sdp });
+    for (const c of pendingIce) await pc.addIceCandidate(c);
+    pendingIce = [];
   }
-  if (m.type === "ice") {
-    pc.remoteDescription ? pc.addIceCandidate(m.candidate) : pending.push(m.candidate);
+
+  if (msg.type === "ice-candidate") {
+    pc.remoteDescription
+      ? pc.addIceCandidate(msg.candidate)
+      : pendingIce.push(msg.candidate);
   }
-  if (m.type === "chat") add("Viewer", m.text);
+
+  if (msg.type === "chat") addChat("Viewer", msg.text);
 };
 
 async function start() {
-  stream = await navigator.mediaDevices.getDisplayMedia({ video:true });
-  local.srcObject = stream;
+  stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+  localVideo.srcObject = stream;
 
   pc = new RTCPeerConnection({ iceServers:[{urls:"stun:stun.l.google.com:19302"}] });
   stream.getTracks().forEach(t => pc.addTrack(t, stream));
 
-  pc.onicecandidate = e => e.candidate && ws.send(JSON.stringify({ type:"ice", candidate:e.candidate }));
+  pc.onicecandidate = e => {
+    if (e.candidate)
+      ws.send(JSON.stringify({ type:"ice-candidate", room, candidate:e.candidate }));
+  };
 
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
-  ws.send(JSON.stringify({ type:"offer", sdp:offer.sdp }));
+
+  ws.send(JSON.stringify({ type:"offer", room, sdp:offer.sdp }));
 }
 
-function send(e){
-  if(e.key==="Enter"){
-    ws.send(JSON.stringify({ type:"chat", text:msg.value }));
-    add("You", msg.value);
-    msg.value="";
+function sendChat(e) {
+  if (e.key === "Enter") {
+    ws.send(JSON.stringify({ type:"chat", room, text:chatInput.value }));
+    addChat("You", chatInput.value);
+    chatInput.value = "";
   }
 }
-function add(user,text){
-  chat.innerHTML += `<div><b>${user}:</b> ${text}</div>`;
+
+function addChat(sender, text) {
+  chat.innerHTML += `<div><b>${sender}:</b> ${text}</div>`;
   chat.scrollTop = chat.scrollHeight;
 }
 </script>
