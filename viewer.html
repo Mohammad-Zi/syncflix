@@ -4,79 +4,108 @@
 <meta charset="utf-8" />
 <title>Viewer</title>
 <style>
-#chat { height:150px; overflow:auto; border:1px solid #444; margin-top:10px }
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #020617;
+  color: white;
+  display: flex;
+  height: 100vh;
+}
+video {
+  flex: 1;
+  background: black;
+}
+aside {
+  width: 320px;
+  background: #020617;
+  display: flex;
+  flex-direction: column;
+}
+header {
+  padding: 16px;
+  font-weight: bold;
+  border-bottom: 1px solid #1e293b;
+}
+.chat {
+  flex: 1;
+  padding: 12px;
+  overflow-y: auto;
+}
+input {
+  border: none;
+  padding: 10px;
+  outline: none;
+  background: #020617;
+  color: white;
+}
 </style>
 </head>
 
 <body>
-<h2>Viewer</h2>
-<button onclick="request()">Watch Screen</button>
-<video id="remoteVideo" autoplay playsinline></video>
+<video id="remote" autoplay playsinline></video>
 
-<div id="chat"></div>
-<input id="chatInput" placeholder="Type message…" onkeydown="sendChat(event)">
+<aside>
+  <header>Viewer</header>
+  <div class="chat" id="chat"></div>
+  <input id="msg" placeholder="Type message…" onkeydown="sendChat(event)">
+</aside>
 
 <script>
-const SERVER =
-  location.protocol === 'https:'
-    ? `wss://${location.host}`
-    : `ws://${location.host}`;
-
-const ws = new WebSocket(SERVER);
-const room = "private";
+const ws = new WebSocket(
+  location.protocol === "https:"
+    ? `wss://${location.host}/ws?role=viewer`
+    : `ws://${location.host}/ws?role=viewer`
+);
 
 let pc;
-let pendingIce = [];
-
-ws.onopen = () => ws.send(JSON.stringify({ type: "join", room }));
+let pending = [];
 
 ws.onmessage = async e => {
-  const msg = JSON.parse(e.data);
+  const m = JSON.parse(e.data);
 
-  if (msg.type === "offer") {
-    pc = new RTCPeerConnection({ iceServers:[{urls:"stun:stun.l.google.com:19302"}] });
+  if (m.type === "offer") {
+    pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+    });
 
-    pc.ontrack = e => remoteVideo.srcObject = e.streams[0];
+    pc.ontrack = e => remote.srcObject = e.streams[0];
 
     pc.onicecandidate = e => {
-      if (e.candidate)
-        ws.send(JSON.stringify({ type:"ice-candidate", room, candidate:e.candidate }));
+      if (e.candidate) {
+        ws.send(JSON.stringify({ type: "ice", candidate: e.candidate }));
+      }
     };
 
-    await pc.setRemoteDescription({ type:"offer", sdp:msg.sdp });
-
-    for (const c of pendingIce) await pc.addIceCandidate(c);
-    pendingIce = [];
+    await pc.setRemoteDescription({ type: "offer", sdp: m.sdp });
+    for (const c of pending) await pc.addIceCandidate(c);
+    pending = [];
 
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
-    ws.send(JSON.stringify({ type:"answer", room, sdp:answer.sdp }));
+    ws.send(JSON.stringify({ type: "answer", sdp: answer.sdp }));
   }
 
-  if (msg.type === "ice-candidate") {
+  if (m.type === "ice") {
     pc?.remoteDescription
-      ? pc.addIceCandidate(msg.candidate)
-      : pendingIce.push(msg.candidate);
+      ? pc.addIceCandidate(m.candidate)
+      : pending.push(m.candidate);
   }
 
-  if (msg.type === "chat") addChat("Host", msg.text);
+  if (m.type === "chat") addChat("Host", m.text);
 };
-
-function request() {
-  ws.send(JSON.stringify({ type:"screen-request", room }));
-}
 
 function sendChat(e) {
   if (e.key === "Enter") {
-    ws.send(JSON.stringify({ type:"chat", room, text:chatInput.value }));
-    addChat("You", chatInput.value);
-    chatInput.value = "";
+    ws.send(JSON.stringify({ type: "chat", text: msg.value }));
+    addChat("You", msg.value);
+    msg.value = "";
   }
 }
 
-function addChat(sender, text) {
-  chat.innerHTML += `<div><b>${sender}:</b> ${text}</div>`;
+function addChat(user, text) {
+  chat.innerHTML += `<div><b>${user}:</b> ${text}</div>`;
   chat.scrollTop = chat.scrollHeight;
 }
 </script>
