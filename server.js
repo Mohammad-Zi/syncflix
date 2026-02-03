@@ -17,8 +17,9 @@ const rooms = new Map();
 
 // Handle WebSocket connections
 wss.on('connection', (ws, req) => {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const roomId = url.searchParams.get('room')
     const parameters = url.parse(req.url, true);
-    const roomId = parameters.query.room;
     const userId = Date.now().toString(); // Simple user ID
     
     console.log(`New connection: ${userId} to room ${roomId}`);

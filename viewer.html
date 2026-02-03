@@ -347,7 +347,7 @@
         
         function connectWebSocket() {
             // Connect to WebSocket server
-            socket = new WebSocket('wss://syncflix-server.onrender.com');
+            socket = new WebSocket(`https://syncflix-r5ak.onrender.com/?room=${roomId}`);
             
             socket.onopen = () => {
                 console.log('✅ Connected to signaling server');
@@ -579,4 +579,69 @@
             if (socket) {
                 socket.close();
                 socket = null;
-           
+            }
+            
+            // Reset UI
+            document.getElementById('appContainer').classList.remove('connected');
+            document.getElementById('connectionPanel').style.display = 'block';
+            
+            document.getElementById('connectBtn').disabled = false;
+            document.getElementById('connectBtn').textContent = 'Connect to Partner';
+            
+            document.getElementById('roomInput').value = '';
+            document.getElementById('roomInput').focus();
+            
+            document.getElementById('remoteVideo').srcObject = null;
+            document.getElementById('noVideo').style.display = 'block';
+            
+            updateStatus('Disconnected');
+            document.getElementById('streamStatusDot').className = 'status-dot';
+            document.getElementById('streamStatusText').textContent = 'Not streaming';
+            
+            showNotification('Disconnected from host');
+            addSystemMessage('🔌 Disconnected from host');
+        }
+        
+        function updateStatus(text) {
+            document.getElementById('statusText').textContent = text;
+            
+            if (text.includes('connected')) {
+                document.getElementById('statusDot').className = 'status-dot connected';
+            } else {
+                document.getElementById('statusDot').className = 'status-dot';
+            }
+        }
+        
+        function addSystemMessage(text) {
+            addMessage(text, 'system');
+        }
+        
+        function addSentMessage(text) {
+            addMessage(`You: ${text}`, 'sent');
+        }
+        
+        function addReceivedMessage(text) {
+            addMessage(`Host: ${text}`, 'received');
+        }
+        
+        function addMessage(text, type) {
+            const chat = document.getElementById('chatMessages');
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.textContent = text;
+            chat.appendChild(msg);
+            chat.scrollTop = chat.scrollHeight;
+        }
+        
+        function showNotification(text, type = 'success') {
+            const notification = document.getElementById('notification');
+            document.getElementById('notificationText').textContent = text;
+            notification.className = `notification ${type} show`;
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
