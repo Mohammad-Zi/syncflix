@@ -721,6 +721,9 @@
         let hostName = null;
         let statsInterval = null;
         let debugMode = false;
+        
+        // Store pending ICE candidates
+        let pendingIceCandidates = [];
 
         // DOM Elements
         const statusDot = document.getElementById('statusDot');
@@ -732,6 +735,57 @@
         const connectionStatusEl = document.getElementById('connectionStatus');
         const debugPanel = document.getElementById('debugPanel');
         const debugLog = document.getElementById('debugLog');
+
+        // Helper: Wait for ICE gathering
+        async function waitForIceGathering(pc, timeout = 2000) {
+            return new Promise((resolve) => {
+                if (pc.iceGatheringState === 'complete') {
+                    resolve();
+                    return;
+                }
+                
+                const checkState = () => {
+                    if (pc.iceGatheringState === 'complete') {
+                        pc.removeEventListener('icegatheringstatechange', checkState);
+                        resolve();
+                    }
+                };
+                
+                pc.addEventListener('icegatheringstatechange', checkState);
+                
+                setTimeout(() => {
+                    pc.removeEventListener('icegatheringstatechange', checkState);
+                    resolve(); // Resolve anyway after timeout
+                }, timeout);
+            });
+        }
+
+        // Helper: Prefer specific codec
+        function preferCodec(sdp, codec) {
+            const lines = sdp.split('\n');
+            const videoLine = lines.findIndex(line => line.startsWith('m=video'));
+            
+            if (videoLine === -1) return sdp;
+            
+            let codecLines = [];
+            for (let i = videoLine + 1; i < lines.length; i++) {
+                if (lines[i].startsWith('m=')) break;
+                if (lines[i].startsWith('a=rtpmap:')) {
+                    codecLines.push(i);
+                }
+            }
+            
+            for (let i = 0; i < codecLines.length; i++) {
+                if (lines[codecLines[i]].includes(codec)) {
+                    const preferredLine = lines[codecLines[i]];
+                    lines.splice(codecLines[i], 1);
+                    lines.splice(codecLines[0], 0, preferredLine);
+                    break;
+                }
+            }
+            
+            return lines.join('\n');
+        }
 
         // Connect as viewer
         function connectAsViewer() {
@@ -869,6 +923,9 @@
                     peerConnection = null;
                 }
                 
+                // Clear any pending candidates
+                pendingIceCandidates = [];
+                
                 // Create new RTCPeerConnection with robust configuration
                 debugLogMessage('Creating RTCPeerConnection...', 'webrtc');
                 peerConnection = new RTCPeerConnection({
@@ -979,8 +1036,8 @@
                         // Try to restart ICE
                         setTimeout(() => {
                             if (peerConnection) {
-                                peerConnection.restartIce();
                                 debugLogMessage('Restarting ICE...', 'info');
+                                peerConnection.restartIce();
                             }
                         }, 1000);
                     } else if (peerConnection.iceConnectionState === 'disconnected') {
@@ -1048,8 +1105,9 @@
                 debugLogMessage('Setting local description...', 'webrtc');
                 await peerConnection.setLocalDescription(answer);
                 
-                // Wait for ICE candidates
-                await new Promise(resolve => setTimeout(resolve, 100));
+                // Wait for ICE gathering
+                debugLogMessage('Waiting for ICE gathering...', 'webrtc');
+                await waitForIceGathering(peerConnection, 1000);
                 
                 // Send answer
                 ws.send(JSON.stringify({
@@ -1060,6 +1118,20 @@
                 }));
                 
                 debugLogMessage(`📤 Sent WebRTC answer to host with ${peerConnection.localDescription.type}`, 'success');
+                
+                // Process any pending ICE candidates that arrived before answer was sent
+                if (pendingIceCandidates.length > 0) {
+                    debugLogMessage(`Processing ${pendingIceCandidates.length} pending ICE candidates`, 'info');
+                    for (const candidate of pendingIceCandidates) {
+                        try {
+                            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                            debugLogMessage('✅ Added pending ICE candidate', 'success');
+                        } catch (error) {
+                            debugLogMessage(`Error adding pending ICE candidate: ${error.message}`, 'error');
+                        }
+                    }
+                    pendingIceCandidates = [];
+                }
                 
                 // Update stats
                 updateStat('statVideoTracks', peerConnection.getReceivers().filter(r => r.track.kind === 'video').length);
@@ -1072,34 +1144,30 @@
             }
         }
 
-        // Helper function to prefer specific codec
-        function preferCodec(sdp, codec) {
-            const lines = sdp.split('\n');
-            const videoLine = lines.findIndex(line => line.startsWith('m=video'));
-            
-            if (videoLine === -1) return sdp;
-            
-            let codecLines = [];
-            for (let i = videoLine + 1; i < lines.length; i++) {
-                if (lines[i].startsWith('m=')) break;
-                if (lines[i].startsWith('a=rtpmap:')) {
-                    codecLines.push(i);
-                }
+        // Handle ICE candidates
+        async function handleIceCandidate(senderId, candidate) {
+            if (!peerConnection) {
+                debugLogMessage('No peer connection yet, storing ICE candidate', 'warning');
+                pendingIceCandidates.push(candidate);
+                return;
             }
             
-            for (let i = 0; i < codecLines.length; i++) {
-                if (lines[codecLines[i]].includes(codec)) {
-                    const preferredLine = lines[codecLines[i]];
-                    lines.splice(codecLines[i], 1);
-                    lines.splice(codecLines[0], 0, preferredLine);
-                    break;
-                }
+            // Check if remote description is set
+            if (!peerConnection.remoteDescription) {
+                debugLogMessage('Remote description not set yet, storing ICE candidate', 'warning');
+                pendingIceCandidates.push(candidate);
+                return;
             }
             
-            return lines.join('\n');
+            try {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                debugLogMessage('✅ Added ICE candidate from host', 'success');
+            } catch (error) {
+                debugLogMessage(`Error adding ICE candidate: ${error.message}`, 'error');
+            }
         }
 
-        // Handle WebRTC answers and ICE candidates
+        // Handle WebRTC answers
         async function handleAnswer(senderId, sdp) {
             if (peerConnection) {
                 try {
@@ -1107,17 +1175,6 @@
                     debugLogMessage('✅ Set remote description from answer', 'success');
                 } catch (error) {
                     debugLogMessage(`Error setting answer: ${error.message}`, 'error');
-                }
-            }
-        }
-
-        async function handleIceCandidate(senderId, candidate) {
-            if (peerConnection) {
-                try {
-                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-                    debugLogMessage('✅ Added ICE candidate', 'success');
-                } catch (error) {
-                    debugLogMessage(`Error adding ICE candidate: ${error.message}`, 'error');
                 }
             }
         }
@@ -1179,6 +1236,9 @@
                 peerConnection = null;
             }
             
+            // Clear pending ICE candidates
+            pendingIceCandidates = [];
+            
             document.getElementById('statsBtn').disabled = true;
             document.getElementById('statsOverlay').classList.remove('visible');
             stopStatsMonitoring();
@@ -1232,7 +1292,7 @@
                         updateStatsOverlay('statsFPS', `${fps} fps`);
                     }
                     
-                    // Simulate latency (in real app, you'd measure RTT)
+                    // Simulate latency
                     updateStatsOverlay('statsLatency', `${Math.floor(Math.random() * 100) + 50} ms`);
                     
                     window.lastFrameTime = now;
