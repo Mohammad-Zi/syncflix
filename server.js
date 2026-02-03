@@ -1,7 +1,7 @@
-const express = require("express");
-const http = require("http");
-const WebSocket = require("ws");
-const cors = require("cors");
+const express = require('express');
+const http = require('http');
+const WebSocket = require('ws');
+const cors = require('cors');
 
 const app = express();
 app.use(cors());
@@ -10,101 +10,94 @@ app.use(express.json());
 const server = http.createServer(app);
 
 // Create WebSocket server
-const wss = new WebSocket.Server({
+const wss = new WebSocket.Server({ 
   server,
-  path: "/ws",
-  clientTracking: true,
+  path: '/ws',
+  clientTracking: true
 });
 
 // Store rooms data with WebRTC session info
 const rooms = new Map();
-
-// Store user metadata
 const userSessions = new Map();
 
-wss.on("connection", (ws, req) => {
-  console.log("🔌 New WebSocket connection");
-
+wss.on('connection', (ws, req) => {
+  console.log('🔌 New WebSocket connection');
+  
   // Parse query parameters from URL
   const url = new URL(req.url, `http://${req.headers.host}`);
-  const roomId = url.searchParams.get("room");
-  const username = url.searchParams.get("username") || "Anonymous";
-  const isHost = url.searchParams.get("host") === "true";
-
+  const roomId = url.searchParams.get('room');
+  const username = url.searchParams.get('username') || 'Anonymous';
+  const isHost = url.searchParams.get('host') === 'true';
+  
   if (!roomId) {
-    console.log("❌ No room ID provided");
-    ws.close(4001, "Room ID required");
+    console.log('❌ No room ID provided');
+    ws.close(4001, 'Room ID required');
     return;
   }
-
+  
   // Add connection to room
   if (!rooms.has(roomId)) {
     rooms.set(roomId, new Set());
   }
   rooms.get(roomId).add(ws);
-
+  
   // Generate unique user ID
   const userId = Math.random().toString(36).substring(7);
-
+  
   // Store user info on WebSocket object
   ws.roomId = roomId;
   ws.userId = userId;
   ws.username = username;
   ws.isHost = isHost;
-
+  
   // Store user session
   userSessions.set(userId, {
     roomId,
     username,
     isHost,
     connectedAt: Date.now(),
+    ip: req.socket.remoteAddress
   });
-
-  console.log(
-    `✅ ${userId} (${username}) joined room: ${roomId}${isHost ? " [HOST]" : ""}`,
-  );
-
+  
+  console.log(`✅ ${userId} (${username}) joined room: ${roomId}${isHost ? ' [HOST]' : ''}`);
+  
   // Send welcome message with user info
-  ws.send(
-    JSON.stringify({
-      type: "welcome",
-      userId: userId,
-      username: username,
-      room: roomId,
-      isHost: isHost,
-      message: "Connected to SyncFlix WebRTC signaling server",
-    }),
-  );
-
+  ws.send(JSON.stringify({
+    type: 'welcome',
+    userId: userId,
+    username: username,
+    room: roomId,
+    isHost: isHost,
+    timestamp: Date.now(),
+    message: 'Connected to SyncFlix WebRTC signaling server'
+  }));
+  
   // Get existing users in room (excluding self)
-  const existingUsers = getUsersInRoom(roomId).filter(
-    (user) => user.id !== userId,
-  );
-
+  const existingUsers = getUsersInRoom(roomId).filter(user => user.id !== userId);
+  
   // Send existing users to new connection
   if (existingUsers.length > 0) {
-    ws.send(
-      JSON.stringify({
-        type: "existing-users",
-        users: existingUsers,
-      }),
-    );
+    ws.send(JSON.stringify({
+      type: 'existing-users',
+      users: existingUsers
+    }));
   }
-
+  
   // Notify others in room about new user
   broadcastToRoom(roomId, ws, {
-    type: "user-joined",
+    type: 'user-joined',
     userId: userId,
     username: username,
     isHost: isHost,
+    timestamp: Date.now()
   });
-
+  
   // Handle messages from client
-  ws.on("message", (message) => {
+  ws.on('message', (message) => {
     try {
       let data;
       let isJson = false;
-
+      
       // Try to parse as JSON
       try {
         data = JSON.parse(message);
@@ -113,130 +106,172 @@ wss.on("connection", (ws, req) => {
         // Handle as plain string command
         data = { type: message };
       }
-
-      const messageType = data.type || "unknown";
-      console.log(
-        `📨 ${messageType} from ${userId} ${isJson ? "(JSON)" : "(plain)"}`,
-      );
-
+      
+      const messageType = data.type || 'unknown';
+      console.log(`📨 ${messageType} from ${userId} ${isJson ? '(JSON)' : '(plain)'}`);
+      
       // Route messages by type
-      switch (messageType) {
-        // Handle both JSON and plain text versions
-        case "join":
-        case "Join":
-        case "JOIN":
+      switch (messageType.toLowerCase()) {
+        case 'join':
+        case 'hello':
           // Send existing users to new user
-          const existingUsers = getUsersInRoom(roomId).filter(
-            (user) => user.id !== userId,
-          );
+          const existingUsers = getUsersInRoom(roomId).filter(user => user.id !== userId);
           if (existingUsers.length > 0) {
-            ws.send(
-              JSON.stringify({
-                type: "existing-users",
-                users: existingUsers,
-              }),
-            );
+            ws.send(JSON.stringify({
+              type: 'existing-users',
+              users: existingUsers
+            }));
           }
           break;
-
-        // Video control messages (expect JSON)
-        case "play":
-        case "pause":
-        case "seek":
-        case "video-change":
-        case "message":
+          
+        // Video control messages
+        case 'play':
+        case 'pause':
+        case 'seek':
+        case 'video-change':
+        case 'message':
+        case 'chat':
           if (isJson) {
             // Forward to all other users in room
             broadcastToRoom(roomId, ws, {
               ...data,
               senderId: userId,
               sender: username,
+              timestamp: Date.now()
             });
           }
           break;
-
-        // WebRTC signaling messages (must be JSON)
-        case "offer":
-        case "answer":
-        case "ice-candidate":
-          if (isJson && data.target) {
+          
+        // WebRTC signaling messages
+        case 'offer':
+          if (isJson && data.target && data.sdp) {
+            console.log(`📤 Forwarding offer from ${userId} to ${data.target}`);
             sendToUser(data.target, {
-              ...data,
+              type: 'offer',
               sender: userId,
+              senderName: username,
+              sdp: data.sdp,
+              timestamp: Date.now()
             });
           }
           break;
-
-        case "sync-request":
-        case "sync":
-          ws.send(
-            JSON.stringify({
-              type: "sync-response",
-              room: roomId,
-              users: getUsersInRoom(roomId),
-              host: getHostInRoom(roomId),
-              timestamp: Date.now(),
-            }),
-          );
+          
+        case 'answer':
+          if (isJson && data.target && data.sdp) {
+            console.log(`📤 Forwarding answer from ${userId} to ${data.target}`);
+            sendToUser(data.target, {
+              type: 'answer',
+              sender: userId,
+              senderName: username,
+              sdp: data.sdp,
+              timestamp: Date.now()
+            });
+          }
           break;
-
-        case "ping":
-        case "PING":
-          ws.send(
-            JSON.stringify({
-              type: "pong",
-              timestamp: Date.now(),
-              received: messageType,
-            }),
-          );
+          
+        case 'ice-candidate':
+        case 'icecandidate':
+          if (isJson && data.target && data.candidate) {
+            console.log(`📤 Forwarding ICE candidate from ${userId} to ${data.target}`);
+            sendToUser(data.target, {
+              type: 'ice-candidate',
+              sender: userId,
+              candidate: data.candidate,
+              timestamp: Date.now()
+            });
+          }
           break;
-
-        case "get-users":
-        case "users":
-          ws.send(
-            JSON.stringify({
-              type: "users-list",
-              users: getUsersInRoom(roomId),
-            }),
-          );
+          
+        case 'sync-request':
+        case 'sync':
+          ws.send(JSON.stringify({
+            type: 'sync-response',
+            room: roomId,
+            users: getUsersInRoom(roomId),
+            host: getHostInRoom(roomId),
+            timestamp: Date.now()
+          }));
           break;
-
+          
+        case 'host-change':
+          if (isJson && ws.isHost && data.newHostId) {
+            const success = updateHost(roomId, data.newHostId);
+            if (success) {
+              broadcastToRoom(roomId, null, {
+                type: 'host-changed',
+                newHostId: data.newHostId,
+                previousHostId: userId,
+                timestamp: Date.now()
+              });
+            }
+          }
+          break;
+          
+        case 'ping':
+        case 'heartbeat':
+          ws.send(JSON.stringify({ 
+            type: 'pong', 
+            timestamp: Date.now(),
+            serverTime: Date.now()
+          }));
+          break;
+          
+        case 'get-users':
+        case 'users':
+        case 'list-users':
+          ws.send(JSON.stringify({
+            type: 'users-list',
+            users: getUsersInRoom(roomId),
+            timestamp: Date.now()
+          }));
+          break;
+          
+        case 'get-room-info':
+        case 'room-info':
+          ws.send(JSON.stringify({
+            type: 'room-info',
+            room: roomId,
+            userCount: rooms.get(roomId)?.size || 0,
+            host: getHostInRoom(roomId),
+            users: getUsersInRoom(roomId),
+            timestamp: Date.now()
+          }));
+          break;
+          
         default:
           console.log(`⚠️ Unknown message type: ${messageType}`);
           // Echo back for debugging
-          if (isJson) {
-            ws.send(
-              JSON.stringify({
-                type: "error",
-                message: `Unknown message type: ${messageType}`,
-                received: data,
-              }),
-            );
-          }
+          ws.send(JSON.stringify({
+            type: 'error',
+            message: `Unknown message type: ${messageType}`,
+            received: data,
+            timestamp: Date.now()
+          }));
       }
     } catch (error) {
-      console.error("❌ Error handling message:", error);
-      console.error("Raw message was:", message.toString());
+      console.error('❌ Error handling message:', error);
+      console.error('Raw message was:', message.toString());
     }
   });
-
+  
   // Handle connection close
-  ws.on("close", () => {
+  ws.on('close', () => {
     console.log(`👋 ${userId} disconnected`);
-
+    
     // Remove from user sessions
     userSessions.delete(userId);
-
+    
     if (rooms.has(roomId)) {
       rooms.get(roomId).delete(ws);
-
+      
       // Notify others
       broadcastToRoom(roomId, null, {
-        type: "user-left",
+        type: 'user-left',
         userId: userId,
         username: username,
+        timestamp: Date.now()
       });
-
+      
       // If host left, assign new host
       if (ws.isHost) {
         const remainingUsers = Array.from(rooms.get(roomId));
@@ -244,15 +279,18 @@ wss.on("connection", (ws, req) => {
           const newHost = remainingUsers[0];
           newHost.isHost = true;
           userSessions.get(newHost.userId).isHost = true;
-
+          
           broadcastToRoom(roomId, null, {
-            type: "host-changed",
+            type: 'host-changed',
             newHostId: newHost.userId,
             previousHostId: userId,
+            timestamp: Date.now()
           });
+          
+          console.log(`👑 New host assigned: ${newHost.userId}`);
         }
       }
-
+      
       // Clean up empty rooms
       if (rooms.get(roomId).size === 0) {
         rooms.delete(roomId);
@@ -260,9 +298,9 @@ wss.on("connection", (ws, req) => {
       }
     }
   });
-
+  
   // Handle errors
-  ws.on("error", (error) => {
+  ws.on('error', (error) => {
     console.error(`❌ WebSocket error for ${userId}:`, error);
   });
 });
@@ -270,44 +308,55 @@ wss.on("connection", (ws, req) => {
 // Helper function to broadcast to room (excluding sender)
 function broadcastToRoom(roomId, senderWs, message) {
   if (!rooms.has(roomId)) return;
-
+  
   const messageStr = JSON.stringify(message);
-  rooms.get(roomId).forEach((client) => {
+  let sentCount = 0;
+  
+  rooms.get(roomId).forEach(client => {
     if (client !== senderWs && client.readyState === WebSocket.OPEN) {
       client.send(messageStr);
+      sentCount++;
     }
   });
+  
+  console.log(`📤 Broadcasted ${message.type} to ${sentCount} user(s) in room ${roomId}`);
 }
 
 // Helper function to send message to specific user
-function sendToUser(userId, message) {
+function sendToUser(targetUserId, message) {
   // Find the user's WebSocket connection
   let targetWs = null;
-  rooms.forEach((clients) => {
-    clients.forEach((client) => {
-      if (client.userId === userId && client.readyState === WebSocket.OPEN) {
+  let foundRoom = null;
+  
+  rooms.forEach((clients, roomId) => {
+    clients.forEach(client => {
+      if (client.userId === targetUserId && client.readyState === WebSocket.OPEN) {
         targetWs = client;
+        foundRoom = roomId;
       }
     });
   });
-
+  
   if (targetWs) {
     targetWs.send(JSON.stringify(message));
+    console.log(`✅ Message sent to ${targetUserId} in room ${foundRoom}`);
     return true;
   }
+  
+  console.log(`❌ Target user ${targetUserId} not found or not connected`);
   return false;
 }
 
 // Helper function to get users in room
 function getUsersInRoom(roomId) {
   if (!rooms.has(roomId)) return [];
-
+  
   const users = [];
-  rooms.get(roomId).forEach((client) => {
+  rooms.get(roomId).forEach(client => {
     users.push({
       id: client.userId,
       username: client.username,
-      isHost: client.isHost,
+      isHost: client.isHost
     });
   });
   return users;
@@ -316,12 +365,12 @@ function getUsersInRoom(roomId) {
 // Helper function to get host in room
 function getHostInRoom(roomId) {
   if (!rooms.has(roomId)) return null;
-
+  
   for (const client of rooms.get(roomId)) {
     if (client.isHost) {
       return {
         id: client.userId,
-        username: client.username,
+        username: client.username
       };
     }
   }
@@ -331,38 +380,53 @@ function getHostInRoom(roomId) {
 // Helper function to update host
 function updateHost(roomId, newHostId) {
   if (!rooms.has(roomId)) return false;
-
+  
   let success = false;
-  rooms.get(roomId).forEach((client) => {
+  let oldHostId = null;
+  
+  rooms.get(roomId).forEach(client => {
     if (client.userId === newHostId) {
       client.isHost = true;
-      userSessions.get(newHostId).isHost = true;
+      if (userSessions.has(newHostId)) {
+        userSessions.get(newHostId).isHost = true;
+      }
       success = true;
     } else if (client.isHost) {
       client.isHost = false;
-      userSessions.get(client.userId).isHost = false;
+      oldHostId = client.userId;
+      if (userSessions.has(client.userId)) {
+        userSessions.get(client.userId).isHost = false;
+      }
     }
   });
-
+  
+  console.log(`👑 Host changed in room ${roomId}: ${oldHostId} -> ${newHostId}`);
   return success;
 }
 
 // HTTP routes
-app.get("/", (req, res) => {
+app.get('/', (req, res) => {
   res.json({
-    service: "SyncFlix WebRTC Signaling Server",
-    status: "online",
-    version: "1.0.0",
+    service: 'SyncFlix WebRTC Signaling Server',
+    status: 'online',
+    version: '1.0.0',
+    documentation: {
+      websocket: 'Connect to /ws?room=ROOM_ID&username=NAME&host=true',
+      endpoints: [
+        'GET / - Server status',
+        'GET /rooms - List all rooms',
+        'GET /room/:id - Get room info',
+        'POST /room/create - Create new room'
+      ]
+    },
     activeRooms: rooms.size,
-    totalConnections: Array.from(rooms.values()).reduce(
-      (sum, clients) => sum + clients.size,
-      0,
-    ),
-    timestamp: new Date().toISOString(),
+    totalConnections: Array.from(rooms.values())
+      .reduce((sum, clients) => sum + clients.size, 0),
+    timestamp: new Date().toISOString()
   });
 });
 
-app.get("/room/:roomId", (req, res) => {
+app.get('/room/:roomId', (req, res) => {
   const roomId = req.params.roomId;
   if (rooms.has(roomId)) {
     res.json({
@@ -370,43 +434,71 @@ app.get("/room/:roomId", (req, res) => {
       userCount: rooms.get(roomId).size,
       host: getHostInRoom(roomId),
       users: getUsersInRoom(roomId),
+      timestamp: new Date().toISOString()
     });
   } else {
-    res.status(404).json({ error: "Room not found" });
+    res.status(404).json({ 
+      error: 'Room not found',
+      message: `Room "${roomId}" does not exist or is empty`
+    });
   }
 });
 
-app.get("/rooms", (req, res) => {
+app.get('/rooms', (req, res) => {
   const roomsInfo = [];
   rooms.forEach((clients, roomId) => {
     roomsInfo.push({
       room: roomId,
       userCount: clients.size,
       host: getHostInRoom(roomId),
+      users: getUsersInRoom(roomId)
     });
   });
-
+  
   res.json({
     rooms: roomsInfo,
     totalRooms: rooms.size,
+    timestamp: new Date().toISOString()
   });
 });
 
-app.post("/room/create", (req, res) => {
+app.post('/room/create', (req, res) => {
   const { roomId, username } = req.body;
-
+  
   if (!roomId) {
-    return res.status(400).json({ error: "Room ID required" });
+    return res.status(400).json({ 
+      error: 'Room ID required',
+      message: 'Please provide a roomId in the request body'
+    });
   }
-
+  
   if (rooms.has(roomId)) {
-    return res.status(409).json({ error: "Room already exists" });
+    return res.status(409).json({ 
+      error: 'Room already exists',
+      message: `Room "${roomId}" is already active`,
+      userCount: rooms.get(roomId).size
+    });
   }
-
+  
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+  const host = req.headers.host;
+  
   res.json({
+    success: true,
     room: roomId,
-    message: "Room created (will be active when first user joins)",
-    wsUrl: `ws://${req.headers.host}/ws?room=${roomId}&username=${username || "Host"}&host=true`,
+    message: 'Room created (will be active when first user joins)',
+    wsUrl: `${protocol === 'https' ? 'wss' : 'ws'}://${host}/ws?room=${roomId}&username=${username || 'Host'}&host=true`,
+    httpUrl: `${protocol}://${host}/room/${roomId}`,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -416,4 +508,5 @@ server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📡 WebSocket available at ws://localhost:${PORT}/ws`);
   console.log(`🌐 HTTP API available at http://localhost:${PORT}`);
+  console.log(`⚡ Ready for WebRTC connections!`);
 });
