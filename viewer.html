@@ -1,25 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SyncFlix Viewer</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<style>
+/* ===== UI STYLES (UNCHANGED) ===== */
+* { box-sizing: border-box; font-family: system-ui, sans-serif; }
+body { background:#0f172a; color:white; margin:0; padding:0; }
+.container { max-width:1200px; margin:auto; padding:20px; }
+.header { text-align:center; margin-bottom:20px; }
+.main-card { background:#020617; border-radius:12px; padding:20px; }
+.video-wrapper { position:relative; background:black; border-radius:12px; overflow:hidden; }
+#remoteScreen { width:100%; display:none; }
+.no-video { text-align:center; padding:60px; color:#94a3b8; }
+.btn { padding:10px 18px; border:none; border-radius:8px; cursor:pointer; }
+.btn-primary { background:#2563eb; color:white; }
+.status { margin-top:15px; font-weight:600; }
+.debug-panel { display:none; margin-top:20px; background:#020617; border-radius:10px; padding:15px; }
+.debug-panel.visible { display:block; }
+#debugLog { max-height:300px; overflow-y:auto; font-size:0.9rem; }
+.debug-entry { padding:6px 0; border-bottom:1px solid #1e293b; }
+.debug-info { color:#60a5fa; }
+.debug-success { color:#34d399; }
+.debug-error { color:#f87171; }
+.debug-webrtc { color:#a78bfa; }
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<div class="header">
+<h1><i class="fas fa-eye"></i> SyncFlix Viewer</h1>
+<p>Watch shared screens in real time</p>
+</div>
+
+<div class="main-card">
+
+<div>
+<input id="roomInput" placeholder="Room ID" />
+<button class="btn btn-primary" onclick="connect()">Join Room</button>
+</div>
+
+<div class="status" id="status">Not connected</div>
+
+<div class="video-wrapper">
+<div id="noVideo" class="no-video">
+<i class="fas fa-desktop fa-3x"></i>
+<p>Waiting for host to start sharing</p>
+</div>
+<video id="remoteScreen" autoplay playsinline></video>
+</div>
+
+<button class="btn btn-primary" onclick="toggleDebug()">Toggle Debug</button>
+
+<div class="debug-panel" id="debugPanel">
+<div id="debugLog"></div>
+</div>
+
+</div>
+</div>
+
 <script>
+/* ===== CONFIG ===== */
+const SERVER = 'wss://syncflix-r5ak.onrender.com';
+
+/* ===== STATE ===== */
+let ws = null;
+let roomId = null;
+let userId = null;
+let hostId = null;
 let peerConnection = null;
 let pendingIceCandidates = [];
 
+/* ===== UI HELPERS ===== */
+function log(msg, type='info') {
+  const logEl = document.getElementById('debugLog');
+  const div = document.createElement('div');
+  div.className = `debug-entry debug-${type}`;
+  div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function toggleDebug() {
+  document.getElementById('debugPanel').classList.toggle('visible');
+}
+
+function setStatus(text) {
+  document.getElementById('status').textContent = text;
+}
+
+/* ===== CONNECT ===== */
+function connect() {
+  roomId = document.getElementById('roomInput').value.trim();
+  if (!roomId) return;
+
+  ws = new WebSocket(`${SERVER}/ws?room=${roomId}&role=viewer`);
+
+  ws.onopen = () => {
+    setStatus('Connected to server');
+    log('WebSocket connected', 'success');
+  };
+
+  ws.onmessage = async (event) => {
+    const data = JSON.parse(event.data);
+    log(`Received ${data.type}`, 'info');
+
+    switch (data.type) {
+      case 'welcome':
+        userId = data.userId;
+        break;
+
+      case 'host-info':
+        hostId = data.hostId;
+        break;
+
+      case 'offer':
+        await handleOffer(data.sender, data.sdp);
+        break;
+
+      case 'ice-candidate':
+        await handleIceCandidate(data.sender, data.candidate);
+        break;
+
+      case 'host-left':
+        setStatus('Host disconnected');
+        break;
+    }
+  };
+
+  ws.onclose = () => {
+    setStatus('Disconnected');
+    log('WebSocket closed', 'error');
+  };
+}
+
+/* ===== WEBRTC ===== */
 async function handleOffer(senderId, sdp) {
+  hostId = senderId;
+
   peerConnection = new RTCPeerConnection();
 
-  peerConnection.onicecandidate = e => {
-    if (e.candidate) {
+  peerConnection.ontrack = (event) => {
+    document.getElementById('remoteScreen').srcObject = event.streams[0];
+    document.getElementById('remoteScreen').style.display = 'block';
+    document.getElementById('noVideo').style.display = 'none';
+    setStatus('Streaming');
+  };
+
+  peerConnection.onicecandidate = (event) => {
+    if (event.candidate) {
       ws.send(JSON.stringify({
         type: 'ice-candidate',
         target: senderId,
-        candidate: e.candidate
+        candidate: event.candidate
       }));
     }
   };
 
-  peerConnection.ontrack = e => {
-    document.getElementById('remoteScreen').srcObject = e.streams[0];
-  };
-
   await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+  log('Remote description set', 'success');
 
   const answer = await peerConnection.createAnswer();
   await peerConnection.setLocalDescription(answer);
@@ -36,6 +181,7 @@ async function handleOffer(senderId, sdp) {
   pendingIceCandidates = [];
 }
 
+/* ===== ICE ===== */
 async function handleIceCandidate(_, candidate) {
   if (!peerConnection || !peerConnection.remoteDescription) {
     pendingIceCandidates.push(candidate);
@@ -44,3 +190,6 @@ async function handleIceCandidate(_, candidate) {
   await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
 }
 </script>
+
+</body>
+</html>
