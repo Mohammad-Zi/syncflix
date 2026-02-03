@@ -1,16 +1,13 @@
 {
-  "name": "syncflix-private",
+  "name": "private-webrtc-share",
   "version": "1.0.0",
   "private": true,
-  "description": "Private 2-person WebRTC screen sharing",
-  "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "ws": "^8.14.2",
-    "cors": "^2.8.5"
+    "ws": "^8.14.2"
   },
   "engines": {
     "node": ">=18"

@@ -1,62 +1,71 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8" />
-  <title>Viewer</title>
+<meta charset="utf-8" />
+<title>Viewer</title>
+<style>
+body { margin:0; font-family:sans-serif; background:#020617; color:white; display:flex; height:100vh }
+video { flex:1; background:black }
+aside { width:320px; display:flex; flex-direction:column; background:#020617 }
+header { padding:16px; font-weight:bold }
+.chat { flex:1; overflow:auto; padding:12px }
+input { border:none; padding:10px; width:100%; outline:none }
+</style>
 </head>
+
 <body>
-  <h2>Viewer – Watch Screen</h2>
-  <video id="remote" autoplay playsinline></video>
+<video id="remote" autoplay playsinline></video>
+
+<aside>
+  <header>Viewer</header>
+  <div class="chat" id="chat"></div>
+  <input id="msg" placeholder="Type message…" onkeydown="send(event)">
+</aside>
 
 <script>
-const SERVER =
+const ws = new WebSocket(
   location.protocol === "https:"
     ? `wss://${location.host}/ws?role=viewer`
-    : `ws://${location.host}/ws?role=viewer`;
+    : `ws://${location.host}/ws?role=viewer`
+);
 
-let ws;
-let pc;
-let pendingCandidates = [];
-
-ws = new WebSocket(SERVER);
+let pc, pending=[];
 
 ws.onmessage = async e => {
-  const msg = JSON.parse(e.data);
+  const m = JSON.parse(e.data);
 
-  if (msg.type === "offer") {
-    pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-    });
+  if (m.type === "offer") {
+    pc = new RTCPeerConnection({ iceServers:[{urls:"stun:stun.l.google.com:19302"}] });
+    pc.ontrack = e => remote.srcObject = e.streams[0];
+    pc.onicecandidate = e => e.candidate && ws.send(JSON.stringify({ type:"ice", candidate:e.candidate }));
 
-    pc.ontrack = e => {
-      document.getElementById("remote").srcObject = e.streams[0];
-    };
-
-    pc.onicecandidate = e => {
-      if (e.candidate) {
-        ws.send(JSON.stringify({ type: "ice-candidate", candidate: e.candidate }));
-      }
-    };
-
-    await pc.setRemoteDescription({ type: "offer", sdp: msg.sdp });
-
-    for (const c of pendingCandidates) await pc.addIceCandidate(c);
-    pendingCandidates = [];
+    await pc.setRemoteDescription({ type:"offer", sdp:m.sdp });
+    for (const c of pending) await pc.addIceCandidate(c);
+    pending=[];
 
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-
-    ws.send(JSON.stringify({ type: "answer", sdp: answer.sdp }));
+    ws.send(JSON.stringify({ type:"answer", sdp:answer.sdp }));
   }
 
-  if (msg.type === "ice-candidate") {
-    if (pc && pc.remoteDescription) {
-      await pc.addIceCandidate(msg.candidate);
-    } else {
-      pendingCandidates.push(msg.candidate);
-    }
+  if (m.type === "ice") {
+    pc?.remoteDescription ? pc.addIceCandidate(m.candidate) : pending.push(m.candidate);
   }
+
+  if (m.type === "chat") add("Host", m.text);
 };
+
+function send(e){
+  if(e.key==="Enter"){
+    ws.send(JSON.stringify({ type:"chat", text:msg.value }));
+    add("You", msg.value);
+    msg.value="";
+  }
+}
+function add(user,text){
+  chat.innerHTML += `<div><b>${user}:</b> ${text}</div>`;
+  chat.scrollTop = chat.scrollHeight;
+}
 </script>
 </body>
 </html>
