@@ -347,7 +347,7 @@
         
         function connectWebSocket() {
             // Connect to WebSocket server
-            socket = new WebSocket(`https://syncflix-r5ak.onrender.com/?room=ws?${roomId}&username=Viewer`);
+            socket = new WebSocket(`https://syncflix-r5ak.onrender.com/ws?room=${roomId}&username=Viewer`);
             
             socket.onopen = () => {
                 console.log('✅ Connected to signaling server');
