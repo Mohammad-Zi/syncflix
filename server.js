@@ -1,147 +1,189 @@
-// server.js - WebSocket Signaling Server for SyncFlix
-const WebSocket = require('ws');
+const express = require('express');
 const http = require('http');
-const url = require('url');
+const WebSocket = require('ws');
+const cors = require('cors');
 
-// Create HTTP server
-const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('SyncFlix Signaling Server is running');
-});
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const server = http.createServer(app);
 
 // Create WebSocket server
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ 
+  server,
+  path: '/ws',  // IMPORTANT: Add this path
+  clientTracking: true
+});
 
-// Store room data
+// Store rooms data
 const rooms = new Map();
 
-// Handle WebSocket connections
 wss.on('connection', (ws, req) => {
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    const roomId = url.searchParams.get('room')
-    const parameters = url.parse(req.url, true);
-    const userId = Date.now().toString(); // Simple user ID
-    
-    console.log(`New connection: ${userId} to room ${roomId}`);
-    
-    if (!roomId) {
-        ws.close(1008, 'Room ID required');
-        return;
+  console.log('🔌 New WebSocket connection');
+  
+  // Parse query parameters from URL
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const roomId = url.searchParams.get('room');
+  const username = url.searchParams.get('username') || 'Anonymous';
+  
+  if (!roomId) {
+    console.log('❌ No room ID provided');
+    ws.close(4001, 'Room ID required');
+    return;
+  }
+  
+  // Add connection to room
+  if (!rooms.has(roomId)) {
+    rooms.set(roomId, new Set());
+  }
+  rooms.get(roomId).add(ws);
+  
+  // Store user info on WebSocket object
+  ws.roomId = roomId;
+  ws.userId = Math.random().toString(36).substring(7);
+  ws.username = username;
+  
+  console.log(`✅ ${ws.userId} joined room: ${roomId}`);
+  
+  // Send welcome message
+  ws.send(JSON.stringify({
+    type: 'welcome',
+    userId: ws.userId,
+    room: roomId,
+    message: 'Connected to SyncFlix signaling server'
+  }));
+  
+  // Notify others in room
+  broadcastToRoom(roomId, ws, {
+    type: 'user-joined',
+    userId: ws.userId,
+    username: username
+  });
+  
+  // Handle messages from client
+  ws.on('message', (message) => {
+    try {
+      const data = JSON.parse(message);
+      console.log(`📨 Message from ${ws.userId}:`, data.type);
+      
+      // Route messages by type
+      switch (data.type) {
+        case 'play':
+        case 'pause':
+        case 'seek':
+        case 'video-change':
+        case 'message':
+          // Forward to all other users in room
+          broadcastToRoom(roomId, ws, {
+            ...data,
+            senderId: ws.userId,
+            sender: username
+          });
+          break;
+          
+        case 'sync-request':
+          // Send current room state back to requester
+          ws.send(JSON.stringify({
+            type: 'sync-response',
+            room: roomId,
+            users: getUsersInRoom(roomId),
+            timestamp: Date.now()
+          }));
+          break;
+          
+        case 'ping':
+          ws.send(JSON.stringify({ type: 'pong' }));
+          break;
+      }
+    } catch (error) {
+      console.error('❌ Error parsing message:', error);
     }
+  });
+  
+  // Handle connection close
+  ws.on('close', () => {
+    console.log(`👋 ${ws.userId} disconnected`);
     
-    // Initialize room if it doesn't exist
-    if (!rooms.has(roomId)) {
-        rooms.set(roomId, new Map());
+    if (rooms.has(roomId)) {
+      rooms.get(roomId).delete(ws);
+      
+      // Notify others
+      broadcastToRoom(roomId, null, {
+        type: 'user-left',
+        userId: ws.userId,
+        username: username
+      });
+      
+      // Clean up empty rooms
+      if (rooms.get(roomId).size === 0) {
+        rooms.delete(roomId);
+        console.log(`🗑️ Room ${roomId} deleted (empty)`);
+      }
     }
-    
-    const room = rooms.get(roomId);
-    
-    // Add user to room
-    ws.userId = userId;
-    ws.roomId = roomId;
-    room.set(userId, ws);
-    
-    // Send welcome message
-    ws.send(JSON.stringify({
-        type: 'welcome',
-        userId: userId,
-        roomId: roomId
-    }));
-    
-    // Notify other users in room
-    broadcastToRoom(roomId, userId, {
-        type: 'user_joined',
-        userId: userId
-    });
-    
-    // Handle messages
-    ws.on('message', (message) => {
-        try {
-            const data = JSON.parse(message);
-            console.log(`Message from ${userId} in ${roomId}:`, data.type);
-            
-            // Route message to appropriate handler
-            handleMessage(ws, roomId, userId, data);
-            
-        } catch (error) {
-            console.error('Error parsing message:', error);
-        }
-    });
-    
-    // Handle disconnect
-    ws.on('close', () => {
-        console.log(`Connection closed: ${userId} from room ${roomId}`);
-        
-        // Remove user from room
-        if (rooms.has(roomId)) {
-            const room = rooms.get(roomId);
-            room.delete(userId);
-            
-            // Notify other users
-            broadcastToRoom(roomId, userId, {
-                type: 'user_left',
-                userId: userId
-            });
-            
-            // Clean up empty rooms
-            if (room.size === 0) {
-                rooms.delete(roomId);
-                console.log(`Room ${roomId} deleted (empty)`);
-            }
-        }
-    });
-    
-    // Handle errors
-    ws.on('error', (error) => {
-        console.error(`WebSocket error for ${userId}:`, error);
-    });
+  });
+  
+  // Handle errors
+  ws.on('error', (error) => {
+    console.error(`❌ WebSocket error for ${ws.userId}:`, error);
+  });
 });
 
-// Handle different message types
-function handleMessage(ws, roomId, userId, data) {
-    switch (data.type) {
-        case 'offer':
-        case 'answer':
-        case 'candidate':
-        case 'chat':
-            // Forward to all other users in the room
-            broadcastToRoom(roomId, userId, data);
-            break;
-            
-        case 'ping':
-            ws.send(JSON.stringify({ type: 'pong' }));
-            break;
-            
-        default:
-            console.log(`Unknown message type: ${data.type}`);
+// Helper function to broadcast to room (excluding sender)
+function broadcastToRoom(roomId, senderWs, message) {
+  if (!rooms.has(roomId)) return;
+  
+  const messageStr = JSON.stringify(message);
+  rooms.get(roomId).forEach(client => {
+    if (client !== senderWs && client.readyState === WebSocket.OPEN) {
+      client.send(messageStr);
     }
+  });
 }
 
-// Broadcast message to all users in room except sender
-function broadcastToRoom(roomId, senderId, data) {
-    if (!rooms.has(roomId)) return;
-    
-    const room = rooms.get(roomId);
-    
-    room.forEach((client, userId) => {
-        if (userId !== senderId && client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(data));
-        }
+// Helper function to get users in room
+function getUsersInRoom(roomId) {
+  if (!rooms.has(roomId)) return [];
+  
+  const users = [];
+  rooms.get(roomId).forEach(client => {
+    users.push({
+      id: client.userId,
+      username: client.username
     });
+  });
+  return users;
 }
+
+// HTTP routes for health checks
+app.get('/', (req, res) => {
+  res.json({
+    service: 'SyncFlix Signaling Server',
+    status: 'online',
+    activeRooms: rooms.size,
+    totalConnections: Array.from(rooms.values())
+      .reduce((sum, clients) => sum + clients.size, 0),
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/room/:roomId', (req, res) => {
+  const roomId = req.params.roomId;
+  if (rooms.has(roomId)) {
+    res.json({
+      room: roomId,
+      userCount: rooms.get(roomId).size,
+      users: getUsersInRoom(roomId)
+    });
+  } else {
+    res.status(404).json({ error: 'Room not found' });
+  }
+});
 
 // Start server
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`✅ SyncFlix Signaling Server running on port ${PORT}`);
-    console.log(`📡 WebSocket URL: ws://localhost:${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📡 WebSocket available at ws://localhost:${PORT}/ws`);
+  console.log(`🌐 HTTP API available at http://localhost:${PORT}`);
 });
-
-// Clean up empty rooms periodically
-setInterval(() => {
-    rooms.forEach((room, roomId) => {
-        if (room.size === 0) {
-            rooms.delete(roomId);
-        }
-    });
-}, 60000); // Every minute
