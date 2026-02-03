@@ -5,13 +5,238 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🎬 SyncFlix Host - LIVE</title>
     <style>
-        /* Your CSS styles remain the same */
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
         body { background: #000; color: white; padding: 20px; }
+        
         .container { max-width: 1000px; margin: 0 auto; }
+        
         .header { text-align: center; margin-bottom: 30px; }
         h1 { color: #4CAF50; }
-        /* ... rest of your CSS ... */
+        
+        .room-id { 
+            background: #222; 
+            padding: 15px; 
+            border-radius: 10px; 
+            font-family: monospace; 
+            font-size: 24px; 
+            letter-spacing: 3px; 
+            margin: 20px auto; 
+            max-width: 400px;
+            border: 2px solid #4CAF50;
+            text-align: center;
+        }
+        
+        .main-content {
+            display: flex;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        @media (max-width: 768px) {
+            .main-content { flex-direction: column; }
+        }
+        
+        .video-section { flex: 2; }
+        
+        .video-container {
+            background: #111;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            min-height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #localVideo {
+            max-width: 100%;
+            max-height: 500px;
+            border-radius: 5px;
+            background: #000;
+        }
+        
+        .no-video {
+            text-align: center;
+            color: #888;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .btn {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        
+        .btn-start {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .btn-stop {
+            background: #f44336;
+            color: white;
+        }
+        
+        .btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        
+        .sidebar { 
+            flex: 1; 
+            min-width: 300px; 
+        }
+        
+        .panel {
+            background: #111;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .panel h3 {
+            color: #4CAF50;
+            margin-bottom: 15px;
+        }
+        
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #f44336;
+        }
+        
+        .status-dot.connected {
+            background: #4CAF50;
+            box-shadow: 0 0 15px #4CAF50;
+        }
+        
+        .chat-messages {
+            height: 300px;
+            overflow-y: auto;
+            background: #000;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .message {
+            margin-bottom: 10px;
+            padding: 10px 15px;
+            border-radius: 10px;
+            max-width: 90%;
+            word-wrap: break-word;
+        }
+        
+        .message.sent {
+            background: #4CAF50;
+            margin-left: auto;
+            margin-right: 10px;
+        }
+        
+        .message.received {
+            background: #333;
+            margin-right: auto;
+            margin-left: 10px;
+        }
+        
+        .message.system {
+            background: #FF9800;
+            color: #000;
+            text-align: center;
+            margin: 5px auto;
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+        
+        .chat-input {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .chat-input input {
+            flex: 1;
+            padding: 12px;
+            background: #222;
+            border: 1px solid #444;
+            border-radius: 5px;
+            color: white;
+            font-size: 16px;
+        }
+        
+        .chat-input button {
+            padding: 12px 25px;
+            background: #4CAF50;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #333;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transform: translateX(150%);
+            transition: transform 0.3s;
+            z-index: 1000;
+            max-width: 400px;
+        }
+        
+        .notification.show {
+            transform: translateX(0);
+        }
+        
+        .notification.success {
+            background: #4CAF50;
+        }
+        
+        .notification.error {
+            background: #f44336;
+        }
+        
+        /* Scrollbar */
+        .chat-messages::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .chat-messages::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+        }
+        
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -82,10 +307,77 @@
         let dataChannel = null;
         let viewerConnected = false;
         
-        // ========== MESSAGE FUNCTIONS (DEFINE FIRST) ==========
+        // ========== UI FUNCTIONS (DEFINE FIRST - CRITICAL!) ==========
+        function updateStatus(text) {
+            const statusEl = document.getElementById('statusText');
+            const dotEl = document.getElementById('statusDot');
+            if (statusEl) statusEl.textContent = text;
+            if (dotEl) {
+                dotEl.className = text.includes('connected') ? 'status-dot connected' : 'status-dot';
+            }
+        }
+        
+        function addSystemMessage(text) {
+            addMessage(text, 'system');
+        }
+        
+        function addSentMessage(text) {
+            addMessage(`You: ${text}`, 'sent');
+        }
+        
+        function addReceivedMessage(text) {
+            addMessage(`Viewer: ${text}`, 'received');
+        }
+        
+        function addMessage(text, type) {
+            const chat = document.getElementById('chatMessages');
+            if (!chat) return;
+            
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            msg.textContent = text;
+            chat.appendChild(msg);
+            chat.scrollTop = chat.scrollHeight;
+        }
+        
+        function showNotification(text, type = 'success') {
+            const notification = document.getElementById('notification');
+            const textEl = document.getElementById('notificationText');
+            if (!notification || !textEl) return;
+            
+            textEl.textContent = text;
+            notification.className = `notification ${type} show`;
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+        
+        function enableChat() {
+            const input = document.getElementById('chatInput');
+            const btn = document.getElementById('sendBtn');
+            if (input && btn) {
+                input.disabled = false;
+                btn.disabled = false;
+                input.placeholder = "Chat with viewer...";
+                input.focus();
+            }
+        }
+        
+        function disableChat() {
+            const input = document.getElementById('chatInput');
+            const btn = document.getElementById('sendBtn');
+            if (input && btn) {
+                input.disabled = true;
+                btn.disabled = true;
+                input.placeholder = "Not connected...";
+            }
+        }
+        
+        // ========== MESSAGE FUNCTIONS ==========
         function sendMessage() {
             const input = document.getElementById('chatInput');
-            const message = input.value.trim();
+            const message = input ? input.value.trim() : '';
             if (!message) return;
             
             if (peer && peer.connected) {
@@ -97,7 +389,7 @@
                     }));
                     
                     addSentMessage(message);
-                    input.value = '';
+                    if (input) input.value = '';
                     
                 } catch (error) {
                     console.error('Error sending via WebRTC:', error);
@@ -117,13 +409,12 @@
                 }));
                 
                 addSentMessage(message);
-                document.getElementById('chatInput').value = '';
+                const input = document.getElementById('chatInput');
+                if (input) input.value = '';
             }
         }
         
-        // ========== INITIALIZATION ==========
-        initializeApp();
-        
+        // ========== CORE FUNCTIONS ==========
         function generateRoomId() {
             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
             let result = '';
@@ -134,28 +425,35 @@
         }
         
         function initializeApp() {
-            // Connect to WebSocket server
-            connectWebSocket();
-            
-            // Display room ID
-            document.getElementById('roomIdDisplay').textContent = `Room ID: ${roomId}`;
-            document.getElementById('roomCode').textContent = roomId;
+            // Display room ID first
+            const roomDisplay = document.getElementById('roomIdDisplay');
+            const roomCode = document.getElementById('roomCode');
+            if (roomDisplay) roomDisplay.textContent = `Room ID: ${roomId}`;
+            if (roomCode) roomCode.textContent = roomId;
             
             addSystemMessage(`Your Room ID: ${roomId}`);
             addSystemMessage("Share this ID with your partner");
             
+            // Connect to WebSocket server
+            connectWebSocket();
+            
             // Event listeners
-            document.getElementById('startBtn').addEventListener('click', startScreenSharing);
-            document.getElementById('stopBtn').addEventListener('click', stopScreenSharing);
-            document.getElementById('sendBtn').addEventListener('click', sendMessage);
-            document.getElementById('chatInput').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') sendMessage();
-            });
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const sendBtn = document.getElementById('sendBtn');
+            const chatInput = document.getElementById('chatInput');
+            
+            if (startBtn) startBtn.addEventListener('click', startScreenSharing);
+            if (stopBtn) stopBtn.addEventListener('click', stopScreenSharing);
+            if (sendBtn) sendBtn.addEventListener('click', sendMessage);
+            if (chatInput) {
+                chatInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') sendMessage();
+                });
+            }
         }
         
-        // ========== WEBSOCKET CONNECTION ==========
         function connectWebSocket() {
-            // ✅ FIXED: Use wss:// not https://
             const wsUrl = `wss://syncflix-r5ak.onrender.com/ws?room=${roomId}&username=Host`;
             console.log('Connecting to:', wsUrl);
             
@@ -190,7 +488,6 @@
                                 updateStatus('Viewer connected');
                                 viewerConnected = true;
                                 
-                                // If we're already sharing, start WebRTC
                                 if (localStream && !peer) {
                                     setTimeout(() => {
                                         console.log('🎬 Viewer connected and we have stream, starting WebRTC...');
@@ -255,7 +552,6 @@
             };
         }
         
-        // ========== SCREEN SHARING ==========
         async function startScreenSharing() {
             try {
                 localStream = await navigator.mediaDevices.getDisplayMedia({
@@ -271,17 +567,20 @@
                 console.log('Tracks:', localStream.getTracks().map(t => t.kind));
                 
                 // Show local video
-                document.getElementById('localVideo').srcObject = localStream;
-                document.getElementById('noVideo').style.display = 'none';
+                const video = document.getElementById('localVideo');
+                const noVideo = document.getElementById('noVideo');
+                if (video) video.srcObject = localStream;
+                if (noVideo) noVideo.style.display = 'none';
                 
                 // Update UI
-                document.getElementById('startBtn').disabled = true;
-                document.getElementById('stopBtn').disabled = false;
+                const startBtn = document.getElementById('startBtn');
+                const stopBtn = document.getElementById('stopBtn');
+                if (startBtn) startBtn.disabled = true;
+                if (stopBtn) stopBtn.disabled = false;
                 
                 addSystemMessage('✅ Screen sharing started');
                 showNotification('Screen sharing active');
                 
-                // Start WebRTC if viewer is already connected
                 if (viewerConnected && !peer) {
                     setTimeout(() => {
                         console.log('🎬 Starting WebRTC because viewer is connected...');
@@ -292,11 +591,14 @@
                 }
                 
                 // Handle when user stops sharing via browser UI
-                localStream.getVideoTracks()[0].onended = () => {
-                    console.log('Screen sharing stopped by browser');
-                    stopScreenSharing();
-                    showNotification('Screen sharing stopped by browser');
-                };
+                const videoTrack = localStream.getVideoTracks()[0];
+                if (videoTrack) {
+                    videoTrack.onended = () => {
+                        console.log('Screen sharing stopped by browser');
+                        stopScreenSharing();
+                        showNotification('Screen sharing stopped by browser');
+                    };
+                }
                 
             } catch (error) {
                 console.error('Screen sharing error:', error);
@@ -319,17 +621,21 @@
             }
             
             // Update UI
-            document.getElementById('localVideo').srcObject = null;
-            document.getElementById('noVideo').style.display = 'block';
-            document.getElementById('startBtn').disabled = false;
-            document.getElementById('stopBtn').disabled = true;
+            const video = document.getElementById('localVideo');
+            const noVideo = document.getElementById('noVideo');
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            
+            if (video) video.srcObject = null;
+            if (noVideo) noVideo.style.display = 'block';
+            if (startBtn) startBtn.disabled = false;
+            if (stopBtn) stopBtn.disabled = true;
             
             disableChat();
             addSystemMessage('🛑 Screen sharing stopped');
             showNotification('Screen sharing stopped');
         }
         
-        // ========== WEBRTC ==========
         function startWebRTC() {
             if (!localStream) {
                 console.error('❌ No local stream to share');
@@ -371,7 +677,6 @@
             
             console.log('🎯 WebRTC peer created, waiting for signal...');
             
-            // Handle signaling data
             peer.on('signal', (data) => {
                 console.log('📤 WebRTC signal event:', data.type);
                 
@@ -402,7 +707,6 @@
                 }
             });
             
-            // WebRTC connected
             peer.on('connect', () => {
                 console.log('✅ WebRTC CONNECTED to viewer!');
                 addSystemMessage('✅ WebRTC connection established');
@@ -410,7 +714,6 @@
                 enableChat();
             });
             
-            // Handle data channel for chat
             peer.on('data', (data) => {
                 try {
                     const message = JSON.parse(data.toString());
@@ -423,14 +726,12 @@
                 }
             });
             
-            // Handle errors
             peer.on('error', (error) => {
                 console.error('❌ WebRTC ERROR:', error);
                 addSystemMessage(`❌ WebRTC error: ${error.message}`);
                 showNotification('WebRTC connection failed', 'error');
             });
             
-            // Handle close
             peer.on('close', () => {
                 console.log('🔌 WebRTC connection closed');
                 disableChat();
@@ -438,60 +739,8 @@
             });
         }
         
-        // ========== UI FUNCTIONS ==========
-        function enableChat() {
-            document.getElementById('chatInput').disabled = false;
-            document.getElementById('sendBtn').disabled = false;
-            document.getElementById('chatInput').placeholder = "Chat with viewer...";
-            document.getElementById('chatInput').focus();
-        }
-        
-        function disableChat() {
-            document.getElementById('chatInput').disabled = true;
-            document.getElementById('sendBtn').disabled = true;
-            document.getElementById('chatInput').placeholder = "Not connected...";
-        }
-        
-        function updateStatus(text) {
-            document.getElementById('statusText').textContent = text;
-            
-            if (text.includes('connected')) {
-                document.getElementById('statusDot').className = 'status-dot connected';
-            } else {
-                document.getElementById('statusDot').className = 'status-dot';
-            }
-        }
-        
-        function addSystemMessage(text) {
-            addMessage(text, 'system');
-        }
-        
-        function addSentMessage(text) {
-            addMessage(`You: ${text}`, 'sent');
-        }
-        
-        function addReceivedMessage(text) {
-            addMessage(`Viewer: ${text}`, 'received');
-        }
-        
-        function addMessage(text, type) {
-            const chat = document.getElementById('chatMessages');
-            const msg = document.createElement('div');
-            msg.className = `message ${type}`;
-            msg.textContent = text;
-            chat.appendChild(msg);
-            chat.scrollTop = chat.scrollHeight;
-        }
-        
-        function showNotification(text, type = 'success') {
-            const notification = document.getElementById('notification');
-            document.getElementById('notificationText').textContent = text;
-            notification.className = `notification ${type} show`;
-            
-            setTimeout(() => {
-                notification.classList.remove('show');
-            }, 3000);
-        }
+        // ========== START APPLICATION ==========
+        initializeApp();
     </script>
 </body>
 </html>
