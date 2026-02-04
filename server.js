@@ -7,7 +7,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Always send index.html for any route (optional, for SPA)
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'viewer.html'));
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Use the port Render provides
