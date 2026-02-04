@@ -1,156 +1,282 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>SyncFlix Viewer</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>For You ❤️</title>
 
 <style>
-* { box-sizing: border-box; font-family: system-ui, sans-serif; }
-body {
-  margin: 0;
-  background: #020617;
-  color: #e5e7eb;
+body{
+  margin:0;
+  font-family:'Segoe UI',cursive;
+  background:linear-gradient(135deg,#ff9a9e,#fad0c4);
+  color:#b30059;
+  overflow-x:hidden;
 }
 
-header {
-  padding: 16px 24px;
-  background: #020617;
-  border-bottom: 1px solid #1e293b;
+/* Floating hearts */
+.heart{
+  position:fixed;
+  bottom:-30px;
+  width:16px;
+  height:16px;
+  background:rgba(255,255,255,.6);
+  transform:rotate(45deg);
+  animation:float 7s linear infinite;
+}
+.heart:before,.heart:after{
+  content:"";
+  position:absolute;
+  width:16px;
+  height:16px;
+  background:inherit;
+  border-radius:50%;
+}
+.heart:before{top:-8px;left:0}
+.heart:after{left:-8px;top:0}
+
+@keyframes float{
+  0%{opacity:0}
+  20%{opacity:.8}
+  100%{transform:translateY(-120vh) rotate(45deg);opacity:0}
 }
 
-main {
-  display: grid;
-  grid-template-columns: 3fr 1fr;
-  height: calc(100vh - 64px);
+/* Sections */
+section{
+  min-height:100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  padding:40px 20px;
+  text-align:center;
 }
 
-.video-area {
-  padding: 16px;
+.card{
+  background:rgba(255,255,255,.25);
+  backdrop-filter:blur(14px);
+  border-radius:25px;
+  padding:35px;
+  max-width:420px;
+  width:100%;
+  box-shadow:0 20px 40px rgba(0,0,0,.15);
+  animation:fadeUp 1s ease;
 }
 
-video {
-  width: 100%;
-  height: 100%;
-  background: black;
-  border-radius: 12px;
+@keyframes fadeUp{
+  from{opacity:0;transform:translateY(30px)}
+  to{opacity:1;transform:translateY(0)}
 }
 
-.chat {
-  border-left: 1px solid #1e293b;
-  display: flex;
-  flex-direction: column;
+h1{font-size:2.2rem}
+h2{font-size:1.4rem}
+
+.btn{
+  margin-top:25px;
+  padding:14px 30px;
+  border:none;
+  border-radius:30px;
+  background:#ff4d88;
+  color:white;
+  font-size:16px;
 }
 
-.chat-log {
-  flex: 1;
-  padding: 12px;
-  overflow-y: auto;
+.buttons button{
+  margin:10px;
+  padding:14px 30px;
+  border-radius:30px;
+  border:none;
+  font-size:16px;
 }
 
-.chat-input {
-  display: flex;
-  padding: 12px;
-  gap: 8px;
-  border-top: 1px solid #1e293b;
+#yes{background:#ff4d88;color:white}
+#no{background:white;color:#ff4d88;position:absolute}
+
+/* Video */
+#videoSection{
+  display:none;
+  background:black;
+}
+video{
+  width:100%;
+  max-width:500px;
+  border-radius:20px;
 }
 
-.chat-input input {
-  flex: 1;
-  padding: 8px;
-  border-radius: 6px;
-  border: none;
+/* Confetti hearts */
+.confetti{
+  position:fixed;
+  width:14px;
+  height:14px;
+  background:#ff4d88;
+  transform:rotate(45deg);
+  animation:confettiFall 2.5s linear forwards;
 }
+.confetti:before,.confetti:after{
+  content:"";
+  position:absolute;
+  width:14px;
+  height:14px;
+  background:inherit;
+  border-radius:50%;
+}
+.confetti:before{top:-7px}
+.confetti:after{left:-7px}
 
-button {
-  padding: 10px 16px;
-  border-radius: 8px;
-  border: none;
-  background: #2563eb;
-  color: white;
-  font-weight: 600;
+@keyframes confettiFall{
+  to{transform:translateY(100vh) rotate(720deg);opacity:0}
 }
 </style>
 </head>
 
 <body>
-<header>
-  <h2>👀 SyncFlix Viewer</h2>
-</header>
 
-<main>
-  <div class="video-area">
-    <video id="screen" autoplay playsinline></video>
-  </div>
-
-  <div class="chat">
-    <div class="chat-log" id="chat"></div>
-    <div class="chat-input">
-      <input id="msg" placeholder="Type a message…" />
-      <button onclick="sendChat()">Send</button>
-    </div>
-  </div>
-</main>
+<!-- YouTube Player (hidden) -->
+<div id="player"></div>
 
 <script>
-/* ================= CONFIG ================= */
-const room = "demo";
-
-const SIGNALING_SERVER =
-  location.hostname
-    ? `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`
-    : "wss://syncflix-r5ak.onrender.com";
-
-/* ================= STATE ================= */
-const ws = new WebSocket(
-  `${SIGNALING_SERVER}?room=${room}&role=viewer`
-);
-
-let pc = null;
-
-/* ================= WS ================= */
-ws.onmessage = async e => {
-  const d = JSON.parse(e.data);
-
-  if (d.type === "chat") addChat(d.sender, d.message);
-
-  if (d.type === "offer") {
-    pc = new RTCPeerConnection();
-
-    pc.ontrack = e => {
-      screen.srcObject = e.streams[0];
-    };
-
-    pc.onicecandidate = e => {
-      if (e.candidate) {
-        ws.send(JSON.stringify({ type: "ice", payload: e.candidate }));
-      }
-    };
-
-    await pc.setRemoteDescription(d.payload);
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-
-    ws.send(JSON.stringify({ type: "answer", payload: answer }));
-  }
-
-  if (d.type === "ice" && pc) {
-    pc.addIceCandidate(d.payload);
-  }
-};
-
-/* ================= CHAT ================= */
-function sendChat() {
-  if (!msg.value) return;
-  ws.send(JSON.stringify({ type: "chat", message: msg.value }));
-  addChat("You", msg.value);
-  msg.value = "";
-}
-
-function addChat(sender, text) {
-  chat.innerHTML += `<div><b>${sender}:</b> ${text}</div>`;
-  chat.scrollTop = chat.scrollHeight;
+// Floating hearts
+for(let i=0;i<25;i++){
+  let h=document.createElement("div");
+  h.className="heart";
+  h.style.left=Math.random()*100+"vw";
+  h.style.animationDuration=4+Math.random()*4+"s";
+  document.body.appendChild(h);
 }
 </script>
+
+<section id="intro">
+  <div class="card">
+    <h1 id="type"></h1>
+    <button class="btn" onclick="startMusic(); go('s1')">Next 💗</button>
+  </div>
+</section>
+
+<section id="s1">
+  <div class="card">
+    <h2>3 years ago… I had no idea you’d become my favorite person.</h2>
+    <button class="btn" onclick="go('s2')">Next 💌</button>
+  </div>
+</section>
+
+<section id="s2">
+  <div class="card">
+    <h2>Every laugh. Every memory. Every heartbeat.</h2>
+    <button class="btn" onclick="go('lock')">One last thing ❤️</button>
+  </div>
+</section>
+
+<section id="lock">
+  <div class="card">
+    <h2>🔒 Tap to unlock</h2>
+    <button class="btn" onclick="go('question')">Unlock 💖</button>
+  </div>
+</section>
+
+<section id="question">
+  <div class="card">
+    <h1>HER_NAME</h1>
+    <h2>Will you be my Valentine? 💘</h2>
+    <div class="buttons">
+      <button id="yes">Yes 💖</button>
+      <button id="no">No 😏</button>
+    </div>
+  </div>
+</section>
+
+<section id="videoSection">
+  <video controls autoplay>
+    <source src="your-video.mp4" type="video/mp4">
+  </video>
+</section>
+
+<script>
+// Typewriter
+const text="Hey my love…";
+let i=0;
+(function type(){
+  if(i<text.length){
+    document.getElementById("type").innerHTML+=text[i++];
+    setTimeout(type,80);
+  }
+})();
+
+// Scroll helper
+function go(id){
+  document.getElementById(id).scrollIntoView({behavior:'smooth'});
+}
+
+/* -------- YouTube API (FIXED) -------- */
+let player, ready=false;
+
+function onYouTubeIframeAPIReady(){
+  player=new YT.Player('player',{
+    height:'0',
+    width:'0',
+    videoId:'myJ7x029Ves',
+    playerVars:{loop:1,playlist:'myJ7x029Ves'},
+    events:{
+      onReady:()=>{
+        ready=true;
+        player.setVolume(30);
+      }
+    }
+  });
+}
+
+let tag=document.createElement("script");
+tag.src="https://www.youtube.com/iframe_api";
+document.body.appendChild(tag);
+
+function startMusic(){
+  if(ready){
+    player.unMute();
+    player.playVideo();
+  }
+}
+
+function fadeOutMusic(){
+  let v=30;
+  let f=setInterval(()=>{
+    v-=2;
+    if(v<=0){
+      player.stopVideo();
+      clearInterval(f);
+    }else{
+      player.setVolume(v);
+    }
+  },100);
+}
+
+// NO button escape
+const no=document.getElementById("no");
+no.addEventListener("mouseover",()=>{
+  no.style.left=Math.random()*(window.innerWidth-120)+"px";
+  no.style.top=Math.random()*(window.innerHeight-120)+"px";
+  no.innerText=["Nope 😌","Try again 😘","Wrong 😏","Nice try 💕"][Math.floor(Math.random()*4)];
+});
+
+// Confetti
+function confetti(){
+  for(let i=0;i<60;i++){
+    let c=document.createElement("div");
+    c.className="confetti";
+    c.style.left=Math.random()*100+"vw";
+    c.style.background=["#ff4d88","#ff7eb3","#ffd1dc"][Math.floor(Math.random()*3)];
+    document.body.appendChild(c);
+    setTimeout(()=>c.remove(),2500);
+  }
+}
+
+// YES
+document.getElementById("yes").onclick=()=>{
+  confetti();
+  fadeOutMusic();
+  setTimeout(()=>{
+    document.getElementById("videoSection").style.display="flex";
+    go("videoSection");
+  },900);
+};
+</script>
+
 </body>
 </html>

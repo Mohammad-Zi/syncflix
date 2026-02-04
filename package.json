@@ -1,16 +1,11 @@
 {
-  "name": "syncflix-signaling-server",
+  "name": "my-website",
   "version": "1.0.0",
-  "description": "WebRTC signaling server for screen sharing and chat",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "ws": "^8.14.2"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "express": "^4.18.2"
   }
 }
