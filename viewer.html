@@ -1,22 +1,99 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
 <title>SyncFlix Viewer</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<style>
+* { box-sizing: border-box; font-family: system-ui, sans-serif; }
+body {
+  margin: 0;
+  background: #020617;
+  color: #e5e7eb;
+}
+
+header {
+  padding: 16px 24px;
+  background: #020617;
+  border-bottom: 1px solid #1e293b;
+}
+
+main {
+  display: grid;
+  grid-template-columns: 3fr 1fr;
+  height: calc(100vh - 64px);
+}
+
+.video-area {
+  padding: 16px;
+}
+
+video {
+  width: 100%;
+  height: 100%;
+  background: black;
+  border-radius: 12px;
+}
+
+.chat {
+  border-left: 1px solid #1e293b;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-log {
+  flex: 1;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.chat-input {
+  display: flex;
+  padding: 12px;
+  gap: 8px;
+  border-top: 1px solid #1e293b;
+}
+
+.chat-input input {
+  flex: 1;
+  padding: 8px;
+  border-radius: 6px;
+  border: none;
+}
+
+button {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: none;
+  background: #2563eb;
+  color: white;
+  font-weight: 600;
+}
+</style>
 </head>
 
 <body>
-<h2>👀 Viewer</h2>
-<video id="screen" autoplay playsinline></video>
+<header>
+  <h2>👀 SyncFlix Viewer</h2>
+</header>
 
-<div>
-  <input id="msg" placeholder="message">
-  <button onclick="sendChat()">Send</button>
-  <div id="chat"></div>
-</div>
+<main>
+  <div class="video-area">
+    <video id="screen" autoplay playsinline></video>
+  </div>
+
+  <div class="chat">
+    <div class="chat-log" id="chat"></div>
+    <div class="chat-input">
+      <input id="msg" placeholder="Type a message…" />
+      <button onclick="sendChat()">Send</button>
+    </div>
+  </div>
+</main>
 
 <script>
+/* ================= CONFIG ================= */
 const room = "demo";
 
 const SIGNALING_SERVER =
@@ -24,12 +101,14 @@ const SIGNALING_SERVER =
     ? `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`
     : "wss://syncflix.onrender.com";
 
+/* ================= STATE ================= */
 const ws = new WebSocket(
   `${SIGNALING_SERVER}?room=${room}&role=viewer`
 );
 
 let pc = null;
 
+/* ================= WS ================= */
 ws.onmessage = async e => {
   const d = JSON.parse(e.data);
 
@@ -60,6 +139,7 @@ ws.onmessage = async e => {
   }
 };
 
+/* ================= CHAT ================= */
 function sendChat() {
   if (!msg.value) return;
   ws.send(JSON.stringify({ type: "chat", message: msg.value }));
@@ -69,6 +149,7 @@ function sendChat() {
 
 function addChat(sender, text) {
   chat.innerHTML += `<div><b>${sender}:</b> ${text}</div>`;
+  chat.scrollTop = chat.scrollHeight;
 }
 </script>
 </body>
